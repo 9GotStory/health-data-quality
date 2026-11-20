@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Environment variables
+.env*
+!.env.example
+
+# Google Apps Script / clasp
+.clasp.json
+.clasprc.json
+
+# Local scratchpad, specs, and tickets
+.scratch/
+
+# Editor & OS
+.DS_Store
+*.local
