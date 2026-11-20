@@ -6,7 +6,7 @@ Monorepo starter template for building full-stack web apps with **React (Vite + 
 
 - **Frontend:** React 19, Vite, TypeScript, Tailwind CSS v4, TanStack Query v5, ESLint, Prettier, Vitest
 - **Backend:** Google Apps Script (`Code.gs`), Google Sheets, pure TypeScript logic tested offline via Vitest
-- **AI / Agent Workflow:** `AGENTS.md` (with `CLAUDE.md` symlink), `CODING_STANDARDS.md`, `GLOSSARY.md`, `docs/adr/`, and `.agents/skills/` (Matt Pocock Core + UI/UX Pro Max)
+- **AI / Agent Workflow:** `AGENTS.md` (with `CLAUDE.md` symlink), `CODING_STANDARDS.md`, `GLOSSARY.md`, `docs/adr/`, `.mcp.json` (Context7 MCP), and `.agents/skills/` (Matt Pocock Core + UI/UX Pro Max)
 
 ## Repository Structure
 

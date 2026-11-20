@@ -28,6 +28,7 @@ Do NOT read all docs upfront. Load only when relevant to the current task:
 - `docs/adr/` — Check Architecture Decision Records (`0000-template.md`) before changing API contracts, Sheet schemas, or structural patterns.
 - `design-system/` — Read `design-system/MASTER.md` and relevant `design-system/pages/` files (generated via `/ui-ux-pro-max`) before designing or building UI pages.
 - `.scratch/` — Check active specs and tickets before starting `/implement`.
+- **Context7 MCP:** Use Context7 (`resolve-library-id` -> `query-docs`) to fetch up-to-date docs for libraries/frameworks (React, TanStack Query, React Router, Tailwind CSS, Vite, Vitest) instead of guessing APIs.
 
 ## Workflow & Routing Conventions
 
