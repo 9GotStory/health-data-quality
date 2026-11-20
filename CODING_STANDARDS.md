@@ -1,53 +1,44 @@
 # Coding Standards
 
-All code and reviews in this repository must adhere to these rules. Deliberate exceptions (`EXC-*`) are explicitly marked so reviewers and automated checks do not flag them.
+> Covers architecture, runtime invariants, and judgement calls across Frontend and GAS Backend.
+> Formatting, import ordering, and basic syntax/type checks are enforced by Prettier, ESLint, and `tsc` — do not duplicate them in reviews.
 
----
+## 1. Monorepo & API Boundaries (Hard Violations)
 
-## Architecture (`ARCH-*`)
+- **[ARCH-1] Strict Workspace Separation:** `frontend/` must never import GAS globals or `backend/` runtime code; `backend/` must never depend on DOM, browser APIs, or React modules.
+- **[ARCH-2] Single Frontend API Client:** React components must not call `fetch` directly against GAS Web App URLs. Route all requests through `frontend/src/api/gasClient.ts`, which encapsulates endpoint URLs, payload serialization, and error normalization.
+- **[ARCH-3] Decoupled GAS Domain Logic:** Separate pure transformation and validation logic (`backend/src/`) from `SpreadsheetApp`, `LockService`, and `PropertiesService` calls in `backend/Code.gs` so core backend rules remain unit-testable offline in Vitest.
+- **[ARCH-4] No Speculative Abstraction:** Do not introduce generic wrappers, factories, or shared monorepo packages until at least two distinct use cases require them.
 
-- **ARCH-01 — Workspace Separation:** Keep browser UI, hooks, and styling in `frontend/`; keep Google Apps Script entrypoints (`Code.gs`) and pure Sheet/domain logic in `backend/`.
-- **ARCH-02 — Single GAS API Client:** All HTTP calls from `frontend/` to the GAS Web App must pass through `frontend/src/api/gasClient.ts` (never scatter `fetch()` calls across components or hooks).
-- **ARCH-03 — Multi-Page Routing:** `react-router` is not installed by default. When a specification requires multiple pages or URL routes, install and use `react-router` rather than ad-hoc state switching.
+## 2. Frontend: React, TypeScript, TanStack Query & Tailwind (Conventions)
 
----
+- **[FE-1] No `useEffect` + `fetch`:** Never fetch or mutate server data inside `useEffect`. Route all server state through TanStack Query (`useQuery`, `useMutation`) hooks wrapping `gasClient`.
+- **[FE-2] GAS-Friendly QueryClient Defaults:** Keep `refetchOnWindowFocus: false`, `staleTime: 5 * 60 * 1000`, and `retry: 1` to respect GAS execution quotas and cold-start latency.
+- **[FE-3] Validate at the API Boundary:** Treat raw JSON returned by GAS as `unknown` and validate/parse the `{ ok: true, data }` / `{ ok: false, error }` envelope before entering UI state. Do not use blind type assertions (`as SomeType`) on unvalidated network responses.
+- **[FE-4] Derive State Instead of Syncing:** Compute derived values during render rather than storing duplicate state synchronized via `useEffect`.
+- **[FE-5] Explicit Async States & Routing:** Every GAS-backed view must handle loading, empty, and error states explicitly. When a spec requires multiple pages/routes, install and use `react-router` instead of ad-hoc state switching.
 
-## Frontend (`FE-*`)
+## 3. Backend: Google Apps Script & Sheets (Hard Violations)
 
-- **FE-01 — No `useEffect` + `fetch`:** Never fetch or mutate server data inside `useEffect`. Use TanStack Query (`useQuery`, `useMutation`) hooks wrapping `gasClient`.
-- **FE-02 — GAS-Friendly QueryClient Defaults:** Keep `refetchOnWindowFocus: false`, `staleTime: 5 * 60 * 1000`, and `retry: 1` to respect GAS execution quotas and cold-start latency.
-- **FE-03 — Boundary Validation:** Parse JSON responses as `unknown` and validate the `{ ok: true, data }` / `{ ok: false, error }` envelope before returning typed data.
-- **FE-04 — Complete UI States:** Every data-driven view must explicitly handle **loading**, **empty**, and **error** states.
+- **[GAS-1] Batch Sheet I/O Only:** Never call `getValue()`, `setValue()`, or `appendRow()` inside a loop. Always read/write ranges in bulk with `getValues()` and `setValues()`.
+- **[GAS-2] Preserve String Columns Before Writing:** Always call `.setNumberFormat("@")` on target string ranges **before** calling `.setValues()` for columns that may contain leading zeros, IDs, or phone numbers, preventing Google Sheets from silently coercing values to numbers/dates.
+- **[GAS-3] Lock Concurrent Writes:** Wrap state-mutating Sheet writes (create/update/delete) in `LockService.getScriptLock()` with a bounded `waitLock()` timeout and release in a `finally` block.
+- **[GAS-4] Centralized Column Schema:** Resolve columns via header mapping or a single schema definition rather than scattering hardcoded numeric column indices across handlers.
+- **[GAS-5] Explicit Response Envelope:** Every `doGet` / `doPost` path must return a consistent JSON shape (`{ ok: true, data }` or `{ ok: false, error }`) via `ContentService.createTextOutput(...).setMimeType(ContentService.MimeType.JSON)`.
 
----
+## 4. Security & Data Integrity (Hard Violations)
 
-## Google Apps Script & Sheets (`GAS-*`)
+- **[SEC-1] Validate Backend Inputs:** Validate required fields, types, and allowed actions in `doGet`/`doPost` before touching any Sheet range.
+- **[SEC-2] No Hardcoded Secrets or Sheet IDs:** Read Spreadsheet IDs and tokens from `PropertiesService.getScriptProperties()` in GAS and `import.meta.env.VITE_GAS_API_URL` in Vite.
+- **[SEC-3] Guard Against Formula Injection:** Sanitize user-supplied strings starting with `=`, `+`, `-`, or `@` (e.g., prefixing `'` or rejecting per spec) before writing them into Google Sheets cells.
 
-- **GAS-01 — Batch Operations Only (Hard Violation):** Never call `getValue()`, `setValue()`, or `appendRow()` inside a loop. Always read/write ranges in batches via `getValues()` / `setValues()`.
-- **GAS-02 — Text Format Before Writing Codes:** Before calling `.setValues()` on any column storing string identifiers or values with leading zeros (e.g., phone numbers, postal codes, item codes), call `.setNumberFormat("@")` on that target range first.
-- **GAS-03 — Script Lock on Writes:** Every write operation (`doPost` or mutating action) must acquire `LockService.getScriptLock()` (`waitLock(...)`) and release it in a `try { ... } finally { lock.releaseLock(); }` block.
-- **GAS-04 — Header/Schema Mapping:** Map Sheet columns from a central header/schema definition rather than scattering magic column indices (`row[0]`, `row[3]`) across handlers.
-- **GAS-05 — Standard JSON Envelope:** All GAS responses must return a JSON envelope: `{ ok: true, data: ... }` on success or `{ ok: false, error: { code, message } }` on failure.
+## 5. Testing & Seams (Conventions)
 
----
+- **[TEST-1] Test Behavior at Seams:** Write Vitest tests against public component behavior, API client contracts, and pure GAS transform functions. Do not assert on Tailwind utility class names or internal hook implementation details.
+- **[TEST-2] Isolated & Deterministic:** Mock network boundaries (`fetch`) in frontend tests and pass fake clocks/IDs where needed; tests must never hit a live GAS deployment or real Google Sheet.
 
-## Security (`SEC-*`)
+## 6. Deliberate Exceptions (Do Not Flag)
 
-- **SEC-01 — Input Validation:** Validate all query parameters and JSON payloads in `doGet` / `doPost` before touching Sheets.
-- **SEC-02 — No Hardcoded Secrets or IDs:** Never commit Spreadsheet IDs, API keys, or deployment URLs. Use `PropertiesService.getScriptProperties()` in GAS and `VITE_GAS_API_URL` in `frontend/.env`.
-- **SEC-03 — Formula Injection Prevention:** Sanitize user-supplied strings starting with `=`, `+`, `-`, or `@` (e.g., prefixing `'`) before writing to Google Sheets.
-
----
-
-## Testing (`TEST-*`)
-
-- **TEST-01 — Pure Logic Separation:** Extract business logic, validation, header mapping, and sanitization out of `Code.gs` into pure TypeScript modules (`backend/src/`) so they run offline in Vitest without GAS globals.
-- **TEST-02 — Frontend Verification:** Cover API client envelope validation, error paths, and key UI states with Vitest.
-
----
-
-## Deliberate Exceptions (`EXC-*` — Do Not Flag)
-
-- **EXC-01 — `text/plain;charset=utf-8` POSTs:** The frontend intentionally sends `POST` requests to GAS with `Content-Type: text/plain;charset=utf-8` (JSON-serialized body) to avoid CORS preflight (`OPTIONS`) failures, which GAS Web Apps do not support.
-- **EXC-02 — GAS Global Entrypoints:** Top-level `doGet(e)` and `doPost(e)` functions in `Code.gs` are required by the Apps Script runtime and are exempt from unused-export or module-import rules.
-- **EXC-03 — Small DTO Duplication:** Lightweight request/response DTO types may be duplicated between `frontend/` and `backend/` rather than introducing a complex shared build step for `clasp`.
+- **[EXC-1] GAS CORS `text/plain` POST Requests:** Sending JSON payloads from `frontend/` to GAS with `Content-Type: text/plain;charset=utf-8` (to bypass CORS preflight limitations in GAS Web Apps) is intentional. Do not flag this as an incorrect `Content-Type` header.
+- **[EXC-2] GAS Global Entrypoints:** Top-level `doGet`, `doPost`, and global GAS service references inside `backend/` entrypoints are required platform idioms.
+- **[EXC-3] Intentional Type Duplication:** Duplicating small API DTO types between `frontend/` and `backend/` is acceptable when avoiding a shared build pipeline keeps GAS deployment simple.

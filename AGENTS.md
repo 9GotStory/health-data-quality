@@ -1,36 +1,45 @@
-# AGENTS.md
+# Project Agent Guide
 
-Monorepo template: **React (Vite + TypeScript + Tailwind CSS + TanStack Query)** in `frontend/` and **Google Apps Script (GAS) Web App + Google Sheets** in `backend/`.
+## Overview
 
-## Read on Demand
-
-- **Before writing or reviewing code:** read `CODING_STANDARDS.md` (rule IDs `ARCH-*`, `FE-*`, `GAS-*`, `SEC-*`, `TEST-*`, `EXC-*`).
-- **Before `/grill-with-docs` or `/to-spec`:** read `GLOSSARY.md` for domain terms and Sheet-to-entity mappings.
-- **Before changing architecture or API contracts:** check `docs/adr/` (use `docs/adr/0000-template.md` for new ADRs).
-- **Before designing or building UI pages:** read `design-system/MASTER.md` and relevant files in `design-system/pages/` (generated via `/ui-ux-pro-max`).
-- **Local specs and tickets:** store working specs/tickets in `.scratch/` (gitignored).
+- **Architecture:** Monorepo with a **React (Vite) + TypeScript + Tailwind CSS + TanStack Query** frontend consuming a **Google Apps Script (GAS) Web App API** backed by Google Sheets.
+- **Key Directories:**
+  - `frontend/` — React + Vite + TypeScript + Tailwind CSS + TanStack Query application
+  - `backend/` — GAS Web App entrypoint (`Code.gs`) and pure TypeScript modules tested offline in Vitest
+  - `.scratch/` — Local workspace for specs and tickets (`/to-spec`, `/to-tickets`, gitignored)
 
 ## Verification Commands
 
-Run from the repository root before finishing any change:
+Run these exact commands from the repository root (do not guess scripts):
 
-- `npm run check` — runs `typecheck`, `lint`, `format:check`, and `test` across all workspaces.
-- `npm run typecheck` — TypeScript check for `frontend` and `backend`.
-- `npm run lint` — ESLint across `frontend` and `backend`.
-- `npm run format:check` — Prettier check across the repo.
-- `npm run test` — Vitest offline unit tests for `frontend` and `backend`.
-- `npm run build` — production Vite build for `frontend`.
+- **Full check:** `npm run check` (runs `typecheck`, `lint`, `format:check`, and `test`)
+- **Test (single):** `npm --workspace=frontend run test -- path/to/file.test.ts` (or `--workspace=backend`)
+- **Test (full):** `npm run test`
+- **Typecheck:** `npm run typecheck`
+- **Lint & Format:** `npm run lint && npm run format:check`
+- **Production Build:** `npm run build`
 
-## Routing Rule
+## Source of Truth (Read on Demand)
 
-- `react-router` is **not** pre-installed. Keep single-page apps simple; when a spec requires multiple pages/routes, install and use `react-router` as the standard router.
+Do NOT read all docs upfront. Load only when relevant to the current task:
+
+- `CODING_STANDARDS.md` — Read before writing code, refactoring, or running `/code-review`.
+- `GLOSSARY.md` — Read before `/grill-with-docs`, domain modeling, or writing specs to keep Sheet/UI terminology aligned.
+- `docs/adr/` — Check Architecture Decision Records (`0000-template.md`) before changing API contracts, Sheet schemas, or structural patterns.
+- `design-system/` — Read `design-system/MASTER.md` and relevant `design-system/pages/` files (generated via `/ui-ux-pro-max`) before designing or building UI pages.
+- `.scratch/` — Check active specs and tickets before starting `/implement`.
+
+## Workflow & Routing Conventions
+
+- Follow the active skill loop: `/grill-with-docs` -> `/to-spec` -> `/to-tickets` -> `/implement` -> `/code-review`.
+- Keep `/implement` strictly scoped to the approved spec/ticket; do not expand scope or rename Sheet columns without approval.
+- Commit changes (or create a WIP commit) before running `/code-review`, as it inspects `git diff`.
+- **Routing:** `react-router` is not pre-installed. Keep single-page apps simple; when a spec requires multiple pages/routes, install and use `react-router`.
 
 ## Hard Guardrails
 
-1. **No `useEffect` + `fetch`:** all frontend server data must go through the single GAS API client and TanStack Query hooks.
-2. **Validate at boundaries:** parse external JSON as `unknown` before narrowing (`frontend` and `backend`).
-3. **Batch Sheets I/O only:** never call `getValue`, `setValue`, or `appendRow` inside loops.
-4. **Preserve leading zeros/codes:** always call `.setNumberFormat("@")` before `.setValues()` on string/code columns.
-5. **Lock every write:** wrap Sheet writes in `LockService.getScriptLock()` and release in `finally`.
-6. **No hardcoded secrets or IDs:** read Spreadsheet IDs from Script Properties (`PropertiesService`) and API URLs from `VITE_GAS_API_URL`.
-7. **Sanitize Sheet inputs:** neutralize formula injection (`=`, `+`, `-`, `@`) before writing user strings to Sheets.
+- Never read, print, or commit `.env*`, `.clasp.json`, Spreadsheet IDs, or API secrets.
+- Never run destructive Sheet operations or deploy directly to production GAS without explicit user confirmation.
+- Do not manually edit generated or dependency directories (`node_modules/`, `dist/`, `build/`).
+- No `useEffect` + `fetch` in `frontend/` — use `gasClient` + TanStack Query hooks only.
+- Batch Sheets I/O only, call `.setNumberFormat("@")` before `.setValues()` on string/code columns, wrap writes in `LockService.getScriptLock()` (`finally` release), and sanitize formula injection (`=`, `+`, `-`, `@`).
