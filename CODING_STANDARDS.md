@@ -22,7 +22,7 @@
 
 - **[GAS-1] Batch Sheet I/O Only:** Never call `getValue()`, `setValue()`, or `appendRow()` inside a loop. Always read/write ranges in bulk with `getValues()` and `setValues()`.
 - **[GAS-2] Preserve String Columns Before Writing:** Always call `.setNumberFormat("@")` on target string ranges **before** calling `.setValues()` for columns that may contain leading zeros, IDs, or phone numbers, preventing Google Sheets from silently coercing values to numbers/dates.
-- **[GAS-3] Lock Concurrent Writes:** Wrap state-mutating Sheet writes (create/update/delete) in `LockService.getScriptLock()` with a bounded `waitLock()` timeout and release in a `finally` block.
+- **[GAS-3] Lock Concurrent Writes:** Wrap state-mutating Sheet writes (create/update/delete) in `LockService.getScriptLock()` with a bounded `tryLock()` timeout and release in a `finally` block.
 - **[GAS-4] Centralized Column Schema:** Resolve columns via header mapping or a single schema definition rather than scattering hardcoded numeric column indices across handlers.
 - **[GAS-5] Explicit Response Envelope:** Every `doGet` / `doPost` path must return a consistent JSON shape (`{ ok: true, data }` or `{ ok: false, error }`) via `ContentService.createTextOutput(...).setMimeType(ContentService.MimeType.JSON)`.
 

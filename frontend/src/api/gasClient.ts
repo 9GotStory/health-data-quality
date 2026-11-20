@@ -93,7 +93,7 @@ export async function fetchItems(apiUrl = getApiUrl()): Promise<ItemDto[]> {
 
 /**
  * Sends a mutation to GAS Web App `doPost` using `text/plain;charset=utf-8`
- * to avoid CORS preflight (`OPTIONS`) requests (see EXC-01).
+ * to avoid CORS preflight (`OPTIONS`) requests (see EXC-1).
  */
 export async function createItem(input: CreateItemInput, apiUrl = getApiUrl()): Promise<ItemDto> {
   const response = await fetch(apiUrl, {

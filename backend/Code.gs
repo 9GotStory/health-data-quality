@@ -1,5 +1,5 @@
 /**
- * Google Apps Script Web App entrypoint (GAS-01 .. GAS-05, SEC-01 .. SEC-03, EXC-02).
+ * Google Apps Script Web App entrypoint (GAS-1 .. GAS-5, SEC-1 .. SEC-3, EXC-2).
  * Pure business/schema logic is mirrored & unit-tested offline in `src/sheetsLogic.ts`.
  */
 
@@ -55,30 +55,34 @@ function buildColumnMap_(headerRow) {
 }
 
 function doGet(e) {
-  var action = e && e.parameter ? e.parameter.action : '';
-  if (action !== 'listItems') {
-    return errorResponse_('INVALID_ACTION', 'Unsupported GET action');
-  }
+  try {
+    var action = e && e.parameter ? e.parameter.action : '';
+    if (action !== 'listItems') {
+      return errorResponse_('INVALID_ACTION', 'Unsupported GET action');
+    }
 
-  var sheet = getOrCreateItemsSheet_();
-  var values = sheet.getDataRange().getValues();
-  if (values.length <= 1) {
-    return okResponse_([]);
-  }
+    var sheet = getOrCreateItemsSheet_();
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) {
+      return okResponse_([]);
+    }
 
-  var col = buildColumnMap_(values[0]);
-  var items = [];
-  for (var r = 1; r < values.length; r++) {
-    var row = values[r];
-    items.push({
-      id: String(row[col.id] || ''),
-      code: String(row[col.code] || ''),
-      name: String(row[col.name] || ''),
-      createdAt: String(row[col.createdAt] || ''),
-    });
-  }
+    var col = buildColumnMap_(values[0]);
+    var items = [];
+    for (var r = 1; r < values.length; r++) {
+      var row = values[r];
+      items.push({
+        id: String(row[col.id] || ''),
+        code: String(row[col.code] || ''),
+        name: String(row[col.name] || ''),
+        createdAt: String(row[col.createdAt] || ''),
+      });
+    }
 
-  return okResponse_(items);
+    return okResponse_(items);
+  } catch (err) {
+    return errorResponse_('INTERNAL_ERROR', err && err.message ? err.message : 'Unexpected error');
+  }
 }
 
 function doPost(e) {
@@ -101,7 +105,10 @@ function doPost(e) {
   }
 
   var lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  if (!lock.tryLock(10000)) {
+    return errorResponse_('LOCK_TIMEOUT', 'Server is busy, please retry');
+  }
+
   try {
     var sheet = getOrCreateItemsSheet_();
     var headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -123,11 +130,13 @@ function doPost(e) {
     var nextRowIndex = sheet.getLastRow() + 1;
     var targetRange = sheet.getRange(nextRowIndex, 1, 1, headerRow.length);
 
-    // Preserve leading zeros/codes on text columns before writing values (GAS-02)
+    // Preserve leading zeros/codes on text columns before writing values (GAS-2)
     sheet.getRange(nextRowIndex, col.code + 1, 1, 1).setNumberFormat('@');
     targetRange.setValues([newRow]);
 
     return okResponse_(item);
+  } catch (err) {
+    return errorResponse_('INTERNAL_ERROR', err && err.message ? err.message : 'Unexpected error');
   } finally {
     lock.releaseLock();
   }
