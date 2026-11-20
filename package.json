@@ -20,7 +20,7 @@
     "skills:sync": "npm run skills:sync:matt && npm run skills:sync:ui"
   },
   "devDependencies": {
-    "prettier": "^3.5.3",
+    "prettier": "^3.10.1",
     "vitest": "^5.1.1"
   }
 }
