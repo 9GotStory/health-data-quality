@@ -18,6 +18,7 @@ Run these exact commands from the repository root (do not guess scripts):
 - **Typecheck:** `npm run typecheck`
 - **Lint & Format:** `npm run lint && npm run format:check`
 - **Production Build:** `npm run build` (builds both `frontend/dist/` and `backend/dist/`)
+- **Browser QA:** Use **Playwright CLI** (`npx playwright-cli`, preferred for token efficiency) or **Playwright MCP** (`.mcp.json`) to verify UI, responsive layouts, interactions, and GAS API integration — choose one per session (do not use both simultaneously).
 
 ## Source of Truth (Read on Demand)
 

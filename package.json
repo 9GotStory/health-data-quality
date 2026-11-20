@@ -23,9 +23,11 @@
     "gas:deploy": "npm --workspace=backend run gas:deploy",
     "skills:sync:matt": "npx skills@latest add mattpocock/skills -a antigravity --skill=setup-matt-pocock-skills --skill=grill-me --skill=grill-with-docs --skill=to-spec --skill=to-tickets --skill=implement --skill=code-review --skill=diagnosing-bugs --skill=grilling --skill=domain-modeling --skill=tdd --skill=codebase-design",
     "skills:sync:ui": "npx ui-ux-pro-max-cli init --ai antigravity",
-    "skills:sync": "npm run skills:sync:matt && npm run skills:sync:ui"
+    "skills:sync:playwright": "playwright-cli install --skills=agents",
+    "skills:sync": "npm run skills:sync:matt && npm run skills:sync:ui && npm run skills:sync:playwright"
   },
   "devDependencies": {
+    "@playwright/cli": "^0.1.25",
     "prettier": "^3.10.1",
     "vitest": "^5.1.1"
   }

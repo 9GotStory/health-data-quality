@@ -3,6 +3,14 @@
 > Covers architecture, runtime invariants, and judgement calls across Frontend and GAS Backend.
 > Formatting, import ordering, and basic syntax/type checks are enforced by Prettier, ESLint, and `tsc` — do not duplicate them in reviews.
 
+## Capability Tiers
+
+Adopt capabilities pragmatically — keep the base template minimal and add optional packages only when required by an approved spec.
+
+- **Core (Required):** TypeScript Strict, ESLint, Prettier, Vitest, Playwright CLI/MCP (Browser QA), and TanStack Query.
+- **Optional (On Demand):** Zod / Validation Framework, Idempotency, Schema Management, React Router, shadcn/ui, Lucide, React Hook Form, TanStack Table, Pagination / Batch Processing, and Retry / Backoff.
+- **Project-Specific:** Authentication / Authorization and domain-specific capabilities driven by business requirements.
+
 ## 1. Monorepo & API Boundaries (Hard Violations)
 
 - **[ARCH-1] Strict Workspace Separation:** `frontend/` must never import GAS globals or `backend/` runtime code; `backend/` must never depend on DOM, browser APIs, or React modules.
@@ -36,6 +44,7 @@
 
 - **[TEST-1] Test Behavior at Seams:** Write Vitest tests against public component behavior, API client contracts, and pure GAS transform functions. Do not assert on Tailwind utility class names or internal hook implementation details.
 - **[TEST-2] Isolated & Deterministic:** Mock network boundaries (`fetch`) in frontend tests and pass fake clocks/IDs where needed; tests must never hit a live GAS deployment or real Google Sheet.
+- **[TEST-3] Browser QA via Playwright CLI/MCP:** Use either Playwright CLI (`npx playwright-cli`) or Playwright MCP (`.mcp.json`)—never both simultaneously—to verify UI, responsive layouts, interactions, and GAS API integration. Do not add a full Playwright E2E test suite unless explicitly required by a spec.
 
 ## 6. Deliberate Exceptions (Do Not Flag)
 

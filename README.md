@@ -17,11 +17,12 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
   - **Deploy ด้วย `@google/clasp` v3** (ติดตั้งเป็น devDependency ใน `backend/` พร้อมใช้งานทันที) ชี้ `srcDir: "dist"` / `rootDir: "dist"` ทำให้ `clasp` track เฉพาะไฟล์ที่ build แล้ว ไม่หลุดไฟล์เทสหรือ config ขึ้น GAS
 - **Quality & Verification:**
   - **Vitest** (ครอบคลุมทั้ง `frontend/` แบบ `jsdom` + Testing Library และ `backend/` แบบ `node` offline) + **ESLint** + **Prettier** + **TypeScript (`tsc --noEmit`)** + **Vite build + esbuild GAS bundle**
+  - **Browser QA ด้วย Playwright CLI / MCP:** ใช้ `npx playwright-cli` (ประหยัด token) หรือ **Playwright MCP** ใน `.mcp.json` เลือกใช้อย่างใดอย่างหนึ่งสำหรับตรวจ UI, Responsive, Interaction และ GAS API Integration (ไม่ต้องใช้ทั้งสองตัวพร้อมกัน และยังไม่เพิ่ม Playwright E2E test suite ล่วงหน้า)
   - การันตีพฤติกรรม GAS runtime ตามมาตรฐาน: ล็อกการเขียนด้วย `LockService.getScriptLock().tryLock()` และปลดล็อกใน `finally`, เรียก `.setNumberFormat("@")` ก่อน `.setValues()` ในคอลัมน์รหัส/เลข 0 นำหน้า, กัน Formula Injection (`=`, `+`, `-`, `@`) และคืน JSON envelope (`{ ok: true, data }` / `{ ok: false, error }`) ทุก path
 - **AI Tooling & Docs:**
-  - `AGENTS.md` (พร้อม symlink `CLAUDE.md -> AGENTS.md`) แบบ Read on Demand, `CODING_STANDARDS.md`, `GLOSSARY.md`, `docs/adr/0000-template.md`
-  - `.mcp.json` ตั้งค่า **Context7 MCP** (`@upstash/context7-mcp`) สำหรับดึงเอกสาร library/framework เวอร์ชันล่าสุดแทนการเดา API
-  - `.agents/skills/` ติดตั้ง **Matt Pocock Core 12 ตัว** และ **UI/UX Pro Max** พร้อมใช้งาน (ต้องมี `python3` สำหรับสคริปต์ `search.py` ของ UI/UX Pro Max)
+  - `AGENTS.md` (พร้อม symlink `CLAUDE.md -> AGENTS.md`) แบบ Read on Demand, `CODING_STANDARDS.md` (แบ่ง Capabilities เป็น Core / Optional / Project-Specific), `GLOSSARY.md`, `docs/adr/0000-template.md`
+  - `.mcp.json` ตั้งค่า **Context7 MCP** (`@upstash/context7-mcp`) และ **Playwright MCP** (`@playwright/mcp@latest`) ร่วมกัน
+  - `.agents/skills/` ติดตั้ง **Matt Pocock Core 12 ตัว**, **UI/UX Pro Max** (ต้องมี `python3` สำหรับ `search.py`) และ **Playwright CLI Skill** (`.agents/skills/playwright-cli/`) พร้อมใช้งาน
 
 ---
 
@@ -33,15 +34,15 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
 ├── CLAUDE.md -> AGENTS.md           # Symlink สำหรับ Claude Code
 ├── CODING_STANDARDS.md              # กฎสถาปัตยกรรม FE/GAS ความปลอดภัย การเทส และข้อยกเว้น
 ├── GLOSSARY.md                      # โครงเปล่าสำหรับคำศัพท์โดเมนและ Sheet-to-entity mapping
-├── .mcp.json                        # การตั้งค่า Context7 MCP
-├── .gitignore                       # ดัก .env*, .clasp.json, .clasprc.json, .scratch/, dist/
+├── .mcp.json                        # การตั้งค่า Context7 MCP + Playwright MCP
+├── .gitignore                       # ดัก .env*, .clasp.json, .clasprc.json, .scratch/, .playwright-cli/, dist/
 ├── package.json                     # Root workspaces & scripts
 ├── vitest.config.ts                 # Root Vitest projects config (frontend + backend)
 ├── docs/
 │   └── adr/
 │       └── 0000-template.md         # เทมเพลต ADR พร้อมเกณฑ์กรอง 3 ข้อ
 ├── .agents/
-│   └── skills/                      # สกิล Matt Pocock Core 12 ตัว + UI/UX Pro Max
+│   └── skills/                      # สกิล Matt Pocock Core 12 ตัว + UI/UX Pro Max + Playwright CLI
 ├── frontend/
 │   ├── .env.example                 # ตัวอย่าง VITE_GAS_API_URL
 │   ├── package.json                 # Dependencies & scripts ฝั่ง frontend
@@ -232,20 +233,21 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
 
 ### 1. Root Scripts (`package.json`)
 
-| คำสั่ง                                                        | คำสั่งจริง / คำอธิบาย                                                            |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `npm run dev`                                               | เปิด Vite dev server ของ `frontend/` (`npm --workspace=frontend run dev`)     |
-| `npm run build`                                             | Build ทั้ง `frontend/dist/` (Vite) และ `backend/dist/` (`esbuild` สำหรับ GAS)   |
-| `npm run check`                                             | รันชุดตรวจสอบครบ `typecheck` + `lint` + `format:check` + `test` ทั้ง 2 workspace |
-| `npm run typecheck`                                         | รัน `tsc --noEmit` ทั้ง `frontend` และ `backend`                                |
-| `npm run lint`                                              | รัน `eslint .` ทั้ง `frontend` และ `backend`                                    |
-| `npm run format:check`                                      | ตรวจฟอร์แมตทั้ง repo ด้วย `prettier --check .`                                   |
-| `npm run test`                                              | รัน Vitest unit tests แบบ offline ทั้ง `frontend` และ `backend`                 |
-| `npm run test:watch`                                        | รัน Vitest โหมด watch ครอบคลุมทั้ง 2 workspace ผ่าน `vitest.config.ts`            |
-| `npm --workspace=frontend run test -- path/to/file.test.ts` | รันเทสทีละไฟล์ฝั่ง `frontend` (เปลี่ยนเป็น `--workspace=backend` สำหรับฝั่ง backend)    |
-| `npm run skills:sync:matt`                                  | ติดตั้ง/ซิงก์ Matt Pocock Core 12 สกิลลง `.agents/skills/`                         |
-| `npm run skills:sync:ui`                                    | ติดตั้ง/ซิงก์ UI/UX Pro Max สกิลลง `.agents/skills/`                               |
-| `npm run skills:sync`                                       | รันทั้ง `skills:sync:matt` และ `skills:sync:ui` ต่อเนื่องกัน                        |
+| คำสั่ง                                                        | คำสั่งจริง / คำอธิบาย                                                             |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `npm run dev`                                               | เปิด Vite dev server ของ `frontend/` (`npm --workspace=frontend run dev`)      |
+| `npm run build`                                             | Build ทั้ง `frontend/dist/` (Vite) และ `backend/dist/` (`esbuild` สำหรับ GAS)    |
+| `npm run check`                                             | รันชุดตรวจสอบครบ `typecheck` + `lint` + `format:check` + `test` ทั้ง 2 workspace  |
+| `npm run typecheck`                                         | รัน `tsc --noEmit` ทั้ง `frontend` และ `backend`                                 |
+| `npm run lint`                                              | รัน `eslint .` ทั้ง `frontend` และ `backend`                                     |
+| `npm run format:check`                                      | ตรวจฟอร์แมตทั้ง repo ด้วย `prettier --check .`                                    |
+| `npm run test`                                              | รัน Vitest unit tests แบบ offline ทั้ง `frontend` และ `backend`                  |
+| `npm run test:watch`                                        | รัน Vitest โหมด watch ครอบคลุมทั้ง 2 workspace ผ่าน `vitest.config.ts`             |
+| `npm --workspace=frontend run test -- path/to/file.test.ts` | รันเทสทีละไฟล์ฝั่ง `frontend` (เปลี่ยนเป็น `--workspace=backend` สำหรับฝั่ง backend)     |
+| `npm run skills:sync:matt`                                  | ติดตั้ง/ซิงก์ Matt Pocock Core 12 สกิลลง `.agents/skills/`                          |
+| `npm run skills:sync:ui`                                    | ติดตั้ง/ซิงก์ UI/UX Pro Max สกิลลง `.agents/skills/`                                |
+| `npm run skills:sync:playwright`                            | ติดตั้ง/ซิงก์ Playwright CLI Skill ลง `.agents/skills/playwright-cli/`             |
+| `npm run skills:sync`                                       | รัน `skills:sync:matt`, `skills:sync:ui` และ `skills:sync:playwright` ต่อเนื่องกัน |
 
 ### 2. Backend & `@google/clasp` v3 Scripts (`backend/package.json`)
 
@@ -273,4 +275,5 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
 - `.env*` (ยกเว้น `.env.example`)
 - `.clasp.json` และ `.clasprc.json` (track เฉพาะ `backend/.clasp.json.example`)
 - `.scratch/` (ที่พัก Specs และ Tickets แบบ local)
+- `.playwright-cli/` (snapshots และ artifacts จากการทำ Browser QA)
 - `node_modules/`, `dist/`, `build/`
