@@ -7,7 +7,7 @@
 
 - **[ARCH-1] Strict Workspace Separation:** `frontend/` must never import GAS globals or `backend/` runtime code; `backend/` must never depend on DOM, browser APIs, or React modules.
 - **[ARCH-2] Single Frontend API Client:** React components must not call `fetch` directly against GAS Web App URLs. Route all requests through `frontend/src/api/gasClient.ts`, which encapsulates endpoint URLs, payload serialization, and error normalization.
-- **[ARCH-3] Decoupled GAS Domain Logic:** Separate pure transformation and validation logic (`backend/src/`) from `SpreadsheetApp`, `LockService`, and `PropertiesService` calls in `backend/Code.gs` so core backend rules remain unit-testable offline in Vitest.
+- **[ARCH-3] Decoupled GAS Domain Logic:** Keep pure transformation, schema mapping, and validation logic in dedicated modules (`backend/src/sheetsLogic.ts`, etc.) separate from `SpreadsheetApp`, `LockService`, and `PropertiesService` calls in `backend/src/main.ts` so core backend rules remain unit-testable offline in Vitest while sharing the exact same code bundled into `backend/dist/Code.js` for `@google/clasp`.
 - **[ARCH-4] No Speculative Abstraction:** Do not introduce generic wrappers, factories, or shared monorepo packages until at least two distinct use cases require them.
 
 ## 2. Frontend: React, TypeScript, TanStack Query & Tailwind (Conventions)
@@ -40,5 +40,5 @@
 ## 6. Deliberate Exceptions (Do Not Flag)
 
 - **[EXC-1] GAS CORS `text/plain` POST Requests:** Sending JSON payloads from `frontend/` to GAS with `Content-Type: text/plain;charset=utf-8` (to bypass CORS preflight limitations in GAS Web Apps) is intentional. Do not flag this as an incorrect `Content-Type` header.
-- **[EXC-2] GAS Global Entrypoints:** Top-level `doGet`, `doPost`, and global GAS service references inside `backend/` entrypoints are required platform idioms.
+- **[EXC-2] GAS Global Entrypoints & Bundle Footer:** Exporting `doGet` / `doPost` in `backend/src/main.ts` and re-exposing them as top-level global functions via `backend/build.mjs` footer (`dist/Code.js`) is required by the Apps Script V8 runtime and `@google/clasp` v3.
 - **[EXC-3] Intentional Type Duplication:** Duplicating small API DTO types between `frontend/` and `backend/` is acceptable when avoiding a shared build pipeline keeps GAS deployment simple.

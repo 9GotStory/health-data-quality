@@ -3,10 +3,10 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'Code.gs'] },
+  { ignores: ['dist'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'build.mjs'],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.node,
