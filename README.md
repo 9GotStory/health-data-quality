@@ -1,147 +1,276 @@
 # react-gas-starter-template
 
-Monorepo starter template for building full-stack web apps with **React (Vite + TypeScript + Tailwind CSS + TanStack Query)** in `frontend/` and **TypeScript Google Apps Script (GAS) Web App + Google Sheets** bundled with **esbuild** and deployed via **`@google/clasp` v3** in `backend/`, equipped with an AI-ready documentation and skills workflow.
+GitHub Base Template Repository แบบ Monorepo สำหรับสร้างเว็บแอปด้วย **React (Vite + TypeScript + Tailwind CSS + TanStack Query)** คู่กับ **Google Apps Script (GAS) Web App + Google Sheets** ที่เขียนด้วย TypeScript, bundle ด้วย **esbuild** และ deploy ผ่าน **`@google/clasp` v3** พร้อมวางระบบเอกสารและสกิลสำหรับ AI-Assisted Development ครบชุด
 
-## Prerequisites
+---
 
-- **Node.js** (v20+ recommended) & **npm** (workspaces support)
-- **Python 3** (required by the `ui-ux-pro-max` skill's `scripts/search.py`)
-- **Google Account** with the [Apps Script API enabled](https://script.google.com/home/usersettings) (required for `@google/clasp`, which is installed directly as a devDependency in `backend/`)
+## Tech Stack & Tooling
 
-## Tech Stack
+- **Frontend (`frontend/`):**
+  - **React 19 + Vite 7 + TypeScript + Tailwind CSS v4**
+  - **TanStack Query v5** ตั้งค่า default ให้เหมาะกับโควตาและ cold-start ของ GAS (`refetchOnWindowFocus: false`, `staleTime: 5 * 60 * 1000`, `retry: 1`) ใน `frontend/src/lib/queryClient.ts`
+  - **Single GAS API Client** (`frontend/src/api/gasClient.ts`) ส่ง `POST` ด้วย `Content-Type: text/plain;charset=utf-8` เพื่อเลี่ยง CORS preflight ของ GAS และ validate response JSON จาก `unknown` ทุกครั้ง
+  - **นโยบาย Routing:** ยังไม่ติดตั้ง `react-router` ล่วงหน้าเพื่อให้ Single-Page App เบาที่สุด หาก Spec ต้องการหลายหน้า/หลาย URL ให้ติดตั้งและใช้ `react-router` เป็นมาตรฐาน
+- **Backend (`backend/`):**
+  - **TypeScript + `@types/google-apps-script`** แยก entrypoint (`backend/src/main.ts`) และ pure logic (`backend/src/sheetsLogic.ts`) ออกจากกันชัดเจน ไม่ต้องเขียน logic ซ้ำสองที่
+  - **Bundle ด้วย `esbuild`** (`backend/build.mjs`) ออกเป็น `backend/dist/Code.js` (พร้อม global footer `doGet(e)` / `doPost(e)` สำหรับ Apps Script V8) และคัดลอก `backend/appsscript.json` ลง `backend/dist/appsscript.json`
+  - **Deploy ด้วย `@google/clasp` v3** (ติดตั้งเป็น devDependency ใน `backend/` พร้อมใช้งานทันที) ชี้ `srcDir: "dist"` / `rootDir: "dist"` ทำให้ `clasp` track เฉพาะไฟล์ที่ build แล้ว ไม่หลุดไฟล์เทสหรือ config ขึ้น GAS
+- **Quality & Verification:**
+  - **Vitest** (ครอบคลุมทั้ง `frontend/` แบบ `jsdom` + Testing Library และ `backend/` แบบ `node` offline) + **ESLint** + **Prettier** + **TypeScript (`tsc --noEmit`)** + **Vite build + esbuild GAS bundle**
+  - การันตีพฤติกรรม GAS runtime ตามมาตรฐาน: ล็อกการเขียนด้วย `LockService.getScriptLock().tryLock()` และปลดล็อกใน `finally`, เรียก `.setNumberFormat("@")` ก่อน `.setValues()` ในคอลัมน์รหัส/เลข 0 นำหน้า, กัน Formula Injection (`=`, `+`, `-`, `@`) และคืน JSON envelope (`{ ok: true, data }` / `{ ok: false, error }`) ทุก path
+- **AI Tooling & Docs:**
+  - `AGENTS.md` (พร้อม symlink `CLAUDE.md -> AGENTS.md`) แบบ Read on Demand, `CODING_STANDARDS.md`, `GLOSSARY.md`, `docs/adr/0000-template.md`
+  - `.mcp.json` ตั้งค่า **Context7 MCP** (`@upstash/context7-mcp`) สำหรับดึงเอกสาร library/framework เวอร์ชันล่าสุดแทนการเดา API
+  - `.agents/skills/` ติดตั้ง **Matt Pocock Core 12 ตัว** และ **UI/UX Pro Max** พร้อมใช้งาน (ต้องมี `python3` สำหรับสคริปต์ `search.py` ของ UI/UX Pro Max)
 
-- **Frontend (`frontend/`):** React 19, Vite 7, TypeScript, Tailwind CSS v4, TanStack Query v5, ESLint, Prettier, Vitest + Testing Library (`jsdom`)
-- **Backend (`backend/`):** TypeScript + `@types/google-apps-script`, `esbuild` bundler (`dist/Code.js` + `dist/appsscript.json`), `@google/clasp` v3 CLI deployment, Google Sheets, offline Vitest unit tests (`node`)
-- **AI / Agent System:** `AGENTS.md` (with `CLAUDE.md -> AGENTS.md` symlink), `CODING_STANDARDS.md`, `GLOSSARY.md`, `docs/adr/`, `.mcp.json` (Context7 MCP), and `.agents/skills/` (Matt Pocock Core + UI/UX Pro Max)
+---
 
-## Repository Structure
+## โครงสร้างโปรเจกต์
 
 ```text
 .
-├── AGENTS.md                        # Entrypoint & Read-on-Demand pointers for AI agents
-├── CLAUDE.md -> AGENTS.md           # Symlink for Claude Code compatibility
-├── CODING_STANDARDS.md              # Architecture, FE, GAS, security, test & exception rules
-├── GLOSSARY.md                      # Domain terminology & Sheet-to-entity mappings
-├── .mcp.json                        # Context7 MCP server configuration
+├── AGENTS.md                        # คู่มือหลักแบบ Read on Demand สำหรับ AI Agent
+├── CLAUDE.md -> AGENTS.md           # Symlink สำหรับ Claude Code
+├── CODING_STANDARDS.md              # กฎสถาปัตยกรรม FE/GAS ความปลอดภัย การเทส และข้อยกเว้น
+├── GLOSSARY.md                      # โครงเปล่าสำหรับคำศัพท์โดเมนและ Sheet-to-entity mapping
+├── .mcp.json                        # การตั้งค่า Context7 MCP
+├── .gitignore                       # ดัก .env*, .clasp.json, .clasprc.json, .scratch/, dist/
+├── package.json                     # Root workspaces & scripts
 ├── vitest.config.ts                 # Root Vitest projects config (frontend + backend)
-├── docs/adr/
-│   └── 0000-template.md             # Concise ADR template with 3 filter criteria
-├── .agents/skills/                  # Synced Matt Pocock Core + UI/UX Pro Max skills
-├── frontend/                        # React + Vite + Tailwind + TanStack Query workspace
-│   ├── .env.example                 # VITE_GAS_API_URL template
+├── docs/
+│   └── adr/
+│       └── 0000-template.md         # เทมเพลต ADR พร้อมเกณฑ์กรอง 3 ข้อ
+├── .agents/
+│   └── skills/                      # สกิล Matt Pocock Core 12 ตัว + UI/UX Pro Max
+├── frontend/
+│   ├── .env.example                 # ตัวอย่าง VITE_GAS_API_URL
+│   ├── package.json                 # Dependencies & scripts ฝั่ง frontend
+│   ├── vite.config.ts               # Vite + React + Tailwind v4 + Vitest (jsdom)
 │   └── src/
 │       ├── api/
-│       │   ├── gasClient.ts         # Single GAS API client + unknown boundary validation
-│       │   └── gasClient.test.ts    # API client & envelope unit tests
-│       ├── hooks/useItems.ts        # Sample TanStack Query hooks (useQuery / useMutation)
-│       ├── lib/queryClient.ts       # GAS-friendly QueryClient defaults
-│       ├── App.tsx                  # Sample UI with loading / empty / error / data states
-│       └── App.test.tsx             # Component tests with Testing Library
-└── backend/                         # TypeScript GAS Web App + @google/clasp v3 workspace
-    ├── .clasp.json.example          # clasp v3 config template (srcDir: "dist")
+│       │   ├── gasClient.ts         # API client จุดเดียว + validate envelope จาก unknown
+│       │   └── gasClient.test.ts    # Unit tests ของ gasClient
+│       ├── hooks/
+│       │   └── useItems.ts          # ตัวอย่าง TanStack Query hooks (useQuery / useMutation)
+│       ├── lib/
+│       │   └── queryClient.ts       # QueryClient ค่าเริ่มต้นที่เหมาะกับ GAS
+│       ├── App.tsx                  # หน้าตัวอย่างจัดการ loading / empty / error / data
+│       └── App.test.tsx             # Component tests ด้วย Testing Library
+└── backend/
+    ├── .clasp.json.example          # ตัวอย่าง clasp config (srcDir: "dist")
     ├── appsscript.json              # Apps Script V8 Web App manifest
     ├── build.mjs                    # esbuild bundler -> dist/Code.js + dist/appsscript.json
+    ├── package.json                 # Dependencies (@google/clasp v3, esbuild) & gas:* scripts
+    ├── tsconfig.json                # TypeScript config พร้อม @types/google-apps-script
+    ├── dist/                        # โฟลเดอร์ผลลัพธ์จากการ build (gitignored, ใช้ push ขึ้น GAS)
+    │   ├── Code.js                  # ไฟล์ที่ bundle พร้อม global doGet / doPost
+    │   └── appsscript.json          # Manifest ที่คัดลอกมาเพื่อ push
     └── src/
         ├── main.ts                  # Typed doGet / doPost, LockService, batch Sheets I/O
-        ├── sheetsLogic.ts           # Pure schema mapping, validation & sanitization logic
+        ├── sheetsLogic.ts           # Pure logic: schema mapping, validation, sanitize formula
         └── sheetsLogic.test.ts      # Offline Vitest unit tests
 ```
 
-## Quick Start
+---
 
-### 1. Create & Install
+## Quick Start (หลังกด Use this template)
 
-Create a repository from this template on GitHub (**Use this template → Create a new repository**), clone it, and install all workspace dependencies (including `@google/clasp`):
+### ขั้นที่ 1: ติดตั้งและเช็กโปรเจกต์
 
-```bash
-npm install
-```
+1. กด **Use this template → Create a new repository** บน GitHub แล้ว clone ลงเครื่อง
+2. ติดตั้ง dependencies ทั้ง monorepo (รวม `@google/clasp` v3 และ `esbuild` ใน `backend/`):
+   ```bash
+   npm install
+   ```
+3. คัดลอกไฟล์ตัวอย่างสำหรับ config ภายในเครื่อง (ทั้งสองไฟล์ถูกดักใน `.gitignore` แล้ว):
+   ```bash
+   cp frontend/.env.example frontend/.env
+   cp backend/.clasp.json.example backend/.clasp.json
+   ```
+4. _(ทางเลือก)_ อัปเดตสกิลใน `.agents/skills/` ให้เป็นเวอร์ชันล่าสุด:
+   ```bash
+   npm run skills:sync
+   ```
+5. ตรวจสอบว่าทุกอย่างผ่านเขียวตั้งแต่เริ่มต้น (typecheck, lint, format, test และ build ทั้ง 2 workspace):
+   ```bash
+   npm run check && npm run build
+   ```
 
-### 2. Configure & Deploy Backend (`@google/clasp` v3)
+### ขั้นที่ 2: ผูก Google Apps Script ด้วย `@google/clasp` v3
 
-1. Enable the Google Apps Script API at [script.google.com/home/usersettings](https://script.google.com/home/usersettings).
-2. Authenticate `clasp` once on your machine:
+1. เปิดใช้งาน **Google Apps Script API** ที่ [script.google.com/home/usersettings](https://script.google.com/home/usersettings)
+2. ล็อกอิน `clasp` ครั้งแรกในเครื่อง:
    ```bash
    npm run gas:login
    ```
-3. Copy `backend/.clasp.json.example` to `backend/.clasp.json` and set your `scriptId` (keeping `"srcDir": "dist"`):
+3. สร้างโปรเจกต์ใหม่ผูกกับ Google Sheets (หรือนำ `scriptId` ที่มีอยู่แล้วมาใส่ใน `backend/.clasp.json` โดยคง `"srcDir": "dist"` หรือ `"rootDir": "dist"`):
    ```bash
-   cp backend/.clasp.json.example backend/.clasp.json
+   npx --workspace=backend clasp create-script --type sheets --title "My App" --rootDir dist
    ```
-   _(Alternatively, create a new bound or standalone Apps Script project directly via `npx --workspace=backend clasp create --type sheets --title "My App" --rootDir dist`.)_
-4. Build and verify what `clasp` will upload:
+4. Build ฝั่ง backend และตรวจรายการไฟล์ที่ `clasp` จะอัปโหลด:
    ```bash
    npm run build
    npm run gas:status
    ```
-   `clasp` uploads only `backend/dist/Code.js` and `backend/dist/appsscript.json` — never `src/*.test.ts`, `eslint.config.js`, or `node_modules/`.
-5. Push code and create a Web App deployment:
+   > ผลลัพธ์จาก `npm run gas:status` (`clasp show-file-status`) ต้องแสดง **Tracked files** เฉพาะ `dist/Code.js` และ `dist/appsscript.json` เท่านั้น (ไม่รวมไฟล์เทสหรือ config)
+5. Push โค้ดและสร้าง Web App Deployment:
    ```bash
    npm run gas:push
    npm run gas:deploy
    ```
-   Open the Apps Script editor (`npm run gas:open`) to configure **Project Settings → Script Properties → `SPREADSHEET_ID`** (if using a standalone script) and copy the deployed Web App `/exec` URL.
+6. เปิด Apps Script Editor เพื่อตั้งค่า `SPREADSHEET_ID` ใน **Project Settings → Script Properties** (กรณีใช้ standalone script) และคัดลอก Web App `/exec` URL ไปใส่ใน `frontend/.env` (`VITE_GAS_API_URL`):
+   ```bash
+   npm run gas:open
+   ```
+7. รันหน้าเว็บทดสอบในเครื่อง:
+   ```bash
+   npm run dev
+   ```
 
-### 3. Configure & Run Frontend
+### ขั้นที่ 3: ตั้งค่าสกิลใน Antigravity (ทำครั้งเดียวต่อโปรเจกต์)
 
-```bash
-cp frontend/.env.example frontend/.env
+เปิด **แชทใหม่** ใน Antigravity แล้วรันคำสั่ง:
+
+```text
+/setup-matt-pocock-skills
 ```
 
-Set `VITE_GAS_API_URL` in `frontend/.env` to the deployed `/exec` URL, then start the dev server and verify everything:
+เพื่อผูกการทำงานของชุดสกิล Matt Pocock ให้เก็บ Specs และ Tickets ลงโฟลเดอร์ `.scratch/` (ซึ่งถูก gitignore ไว้เรียบร้อย)
 
-```bash
-npm run dev
-npm run check
+---
+
+## เวิร์กโฟลว์ตั้งแต่เปิดโปรเจกต์จนจบฟีเจอร์ (7 ขั้นตอน)
+
+### ภาพรวม 7 ขั้นตอนและการจัดการแชท/Context
+
+|  ขั้น   | เป้าหมาย                            | คำสั่ง / สกิล                                                   | การจัดการแชท / Context                              |
+| :---: | ---------------------------------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| **1** | ติดตั้ง & ผูก GAS ด้วย `clasp`          | `npm install`, `gas:login`, `npm run check && npm run build` | **Terminal**                                       |
+| **2** | ผูกชุดสกิลกับ `.scratch/`              | `/setup-matt-pocock-skills`                                  | **แชทใหม่ (ทำครั้งเดียวต่อโปรเจกต์)**                    |
+| **3** | ตกลงขอบเขต, คำศัพท์ และ Sheet Schema | `/grill-with-docs`                                           | **แชท A (ปิด Plan Mode)**                           |
+| **4** | ออกแบบ UI & สร้าง Design System     | `/ui-ux-pro-max`                                             | **แชท B (แยกแชทใหม่)**                              |
+| **5** | แปลงเป็น Spec และแตก Tickets        | `/to-spec` → `/to-tickets`                                   | **กลับไปแชท A** _(แนะนำ commit เอกสารก่อนโค้ด)_       |
+| **6** | ลงมือพัฒนาโค้ด + เทสทีละงาน            | `/implement`                                                 | **แชทใหม่ทุก Ticket (ทีละ 1 Ticket)**                 |
+| **7** | รีวิวมาตรฐาน & สเปกก่อนปิดงาน          | `/code-review` + `npm run check && npm run build`            | **แชทใหม่หรือท้าย Ticket (commit/WIP commit ก่อนรีวิว)** |
+
+### ตัวอย่าง Prompt พร้อมก๊อปในแต่ละขั้น
+
+#### ขั้นที่ 3 — `/grill-with-docs` (แชท A — ปิด Plan Mode)
+
+```text
+/grill-with-docs
+ช่วยซักถามเพื่อวางขอบเขตระบบ [ชื่อระบบ/ฟีเจอร์] ที่เชื่อมต่อ Google Sheets
+- อัปเดตคำศัพท์และ Sheet-to-entity mapping ลง GLOSSARY.md
+- หากมีการตัดสินใจทางสถาปัตยกรรมที่เข้าเกณฑ์ 3 ข้อ ให้บันทึก ADR ใน docs/adr/
 ```
 
-## Architecture & Key Design Decisions
+#### ขั้นที่ 4 — `/ui-ux-pro-max` (แชท B — แยกแชทใหม่)
 
-- **TypeScript-First GAS with `@google/clasp` v3:** Because `clasp` v3 dropped built-in `ts2gas` transpilation, `backend/build.mjs` bundles `backend/src/main.ts` + `backend/src/sheetsLogic.ts` via `esbuild` into `backend/dist/Code.js` (with a top-level `doGet`/`doPost` global footer for Apps Script V8) and copies `backend/appsscript.json` to `backend/dist/`. There is **zero logic duplication** between what runs in GAS and what Vitest tests offline.
-- **Single GAS API Client & Boundary Validation:** All frontend network calls go through `frontend/src/api/gasClient.ts`. Responses are parsed as `unknown` and validated against the `{ ok: true, data }` / `{ ok: false, error }` envelope.
-- **TanStack Query (No `useEffect` + `fetch`):** Server state uses TanStack Query hooks with GAS-friendly defaults (`refetchOnWindowFocus: false`, `staleTime: 5 * 60 * 1000`, `retry: 1`) to protect Apps Script quotas and handle cold-start latency.
-- **CORS-Safe GAS `POST` Requests:** Mutations send JSON payloads with `Content-Type: text/plain;charset=utf-8` to avoid CORS preflight (`OPTIONS`) failures in GAS Web Apps (documented in `CODING_STANDARDS.md` as `EXC-1`).
-- **Safe Google Sheets Writes:** `backend/src/main.ts` performs batch reads/writes only, locks writes via `LockService.getScriptLock().tryLock()` with `finally` release, calls `.setNumberFormat("@")` before `.setValues()` on string/code columns to preserve leading zeros, and neutralizes formula injection (`=`, `+`, `-`, `@`).
-- **Routing Policy:** `react-router` is intentionally not pre-installed to keep single-page apps lean. When a spec requires multiple pages/routes, install and use `react-router`.
+> **หมายเหตุ:** สกิลนี้เรียกใช้ `.agents/skills/ui-ux-pro-max/scripts/search.py` ซึ่งต้องมี `python3` พร้อมใช้งานในเครื่อง (`python3 --version`)
 
-## AI / Agent Workflow
+```text
+/ui-ux-pro-max
+อ่าน GLOSSARY.md เพื่อเข้าใจบริบทของระบบ แล้วช่วยออกแบบ Design System สำหรับโปรเจกต์นี้
+โดยบันทึกผลลง design-system/<project>/MASTER.md (และไฟล์หน้าย่อยใน design-system/<project>/pages/ ถ้าจำเป็น)
+```
 
-This template uses a **Read on Demand** documentation model centered on `AGENTS.md` (and `CLAUDE.md` symlink):
+#### ขั้นที่ 5 — `/to-spec` → `/to-tickets` (กลับไปแชท A)
 
-1. **Align domain & decisions:** Run `/grill-with-docs` to update `GLOSSARY.md` (terms & Sheet-to-entity mappings) and record major trade-offs in `docs/adr/`.
-2. **Design UI (optional):** Run `/ui-ux-pro-max` to generate `design-system/MASTER.md` and `design-system/pages/` before building new pages.
-3. **Spec & ticket locally:** Run `/to-spec` → `/to-tickets` (stored in `.scratch/`, which is gitignored).
-4. **Implement & verify:** Run `/implement` following `CODING_STANDARDS.md`, query up-to-date library docs via **Context7 MCP** (`.mcp.json`), and pass `npm run check` + `npm run build`.
-5. **Review before merge:** Create a commit (or WIP commit) and run `/code-review` to check against both `CODING_STANDARDS.md` and the spec.
+```text
+/to-spec
+สรุปข้อตกลงทั้งหมดจากแชทนี้ร่วมกับ GLOSSARY.md และ design-system/ เป็น Spec ไว้ใน .scratch/
+```
 
-## Available Scripts
+เมื่อตรวจ Spec เรียบร้อยแล้ว ให้รันต่อในแชท A:
 
-| Command                                                     | Description                                                                    |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `npm run dev`                                               | Start Vite dev server for `frontend/`                                          |
-| `npm run build`                                             | Build both `frontend/dist/` (Vite) and `backend/dist/` (`esbuild` for GAS)     |
-| `npm run check`                                             | Run `typecheck`, `lint`, `format:check`, and `test` across workspaces          |
-| `npm run typecheck`                                         | Run TypeScript typechecking for `frontend` and `backend`                       |
-| `npm run lint`                                              | Run ESLint across `frontend` and `backend`                                     |
-| `npm run format:check`                                      | Check formatting across the repo with Prettier                                 |
-| `npm run test`                                              | Run offline Vitest unit tests for `frontend` and `backend`                     |
-| `npm run test:watch`                                        | Run Vitest in watch mode across both `frontend` and `backend`                  |
-| `npm --workspace=frontend run test -- path/to/file.test.ts` | Run a single frontend test file (replace `frontend` with `backend`)            |
-| `npm run gas:login`                                         | Authenticate `@google/clasp` with your Google account                          |
-| `npm run gas:status`                                        | Inspect files in `backend/dist/` tracked by `clasp` (`clasp show-file-status`) |
-| `npm run gas:push`                                          | Build `backend/dist/` and push to Google Apps Script via `clasp push`          |
-| `npm run gas:pull`                                          | Pull remote Apps Script files via `clasp pull`                                 |
-| `npm run gas:open`                                          | Open the linked Apps Script project in your browser (`clasp open-script`)      |
-| `npm run gas:deploy`                                        | Build, push, and create a deployment via `clasp create-deployment`             |
-| `npm run skills:sync:matt`                                  | Sync Matt Pocock Core skills (12 skills) into `.agents/skills/`                |
-| `npm run skills:sync:ui`                                    | Sync UI/UX Pro Max skill into `.agents/skills/`                                |
-| `npm run skills:sync`                                       | Run both `skills:sync:matt` and `skills:sync:ui`                               |
+```text
+/to-tickets
+แตก Spec ล่าสุดใน .scratch/ ออกเป็น Tickets ย่อยที่จบได้ใน 1 แชทต่อ 1 Ticket
+```
+
+> **แนะนำ:** ก่อนเริ่มลงมือเขียนโค้ด ให้ `git commit` เอกสารตั้งต้น (`GLOSSARY.md`, `docs/adr/`, `design-system/`) เก็บไว้ก่อน เพื่อให้ `git diff` ตอน `/code-review` สะอาดและเห็นเฉพาะโค้ดของฟีเจอร์
+
+#### ขั้นที่ 6 — `/implement` (แชทใหม่ — ทีละ 1 Ticket)
+
+```text
+/implement
+ทำเฉพาะ Ticket [ชื่อไฟล์หรือหมายเลข Ticket ใน .scratch/]
+อ้างอิง CODING_STANDARDS.md, GLOSSARY.md และ design-system/ อย่างเคร่งครัด และรัน npm run check && npm run build ให้ผ่าน
+```
+
+#### ขั้นที่ 7 — `/code-review` (commit ก่อนรีวิว)
+
+1. ทำ commit (หรือ WIP commit) ก่อน เพื่อให้ `/code-review` ตรวจจาก `git diff` ได้แม่นยำ:
+   ```bash
+   git add . && git commit -m "wip: implement <ticket-name>"
+   ```
+2. รันสกิลรีวิว 2 แกน (Standards เทียบ `CODING_STANDARDS.md` และ Spec เทียบ `.scratch/`):
+   ```text
+   /code-review
+   รีวิวการเปลี่ยนแปลงเทียบกับ CODING_STANDARDS.md และ Spec/Ticket ใน .scratch/
+   ```
+3. หลังแก้ครบทุกคอมเมนต์ ให้ปิดท้ายด้วย:
+   ```bash
+   npm run check && npm run build
+   ```
+
+---
+
+## ลูปประจำวัน (ตั้งแต่ฟีเจอร์ที่ 2 เป็นต้นไป)
+
+- **พัฒนาฟีเจอร์ใหม่:**
+  `/grill-with-docs` → `/to-spec` → (`/to-tickets`) → `/implement` → `/code-review`
+  - เรียก `/ui-ux-pro-max` **เฉพาะเมื่อมีหน้าใหม่** ที่ต้องสร้าง override เพิ่มใน `design-system/<project>/pages/`
+- **แก้บั๊กยากหรือปัญหา Performance:**
+  เปิด **แชทใหม่** แล้วใช้ `/diagnosing-bugs` เพื่อไล่หาสาเหตุเชิงระบบก่อนลงมือแก้
+- **ดูแล Base Template ระยะยาว:**
+  เมื่อเจอกฎหรือบทเรียนที่เป็นกลางและใช้ได้กับทุกโปรเจกต์ ให้นำกลับไปอัปเดตใน `CODING_STANDARDS.md` ของ Base Template Repository
+
+---
+
+## ตารางคำสั่งทั้งหมด
+
+### 1. Root Scripts (`package.json`)
+
+| คำสั่ง                                                        | คำสั่งจริง / คำอธิบาย                                                            |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `npm run dev`                                               | เปิด Vite dev server ของ `frontend/` (`npm --workspace=frontend run dev`)     |
+| `npm run build`                                             | Build ทั้ง `frontend/dist/` (Vite) และ `backend/dist/` (`esbuild` สำหรับ GAS)   |
+| `npm run check`                                             | รันชุดตรวจสอบครบ `typecheck` + `lint` + `format:check` + `test` ทั้ง 2 workspace |
+| `npm run typecheck`                                         | รัน `tsc --noEmit` ทั้ง `frontend` และ `backend`                                |
+| `npm run lint`                                              | รัน `eslint .` ทั้ง `frontend` และ `backend`                                    |
+| `npm run format:check`                                      | ตรวจฟอร์แมตทั้ง repo ด้วย `prettier --check .`                                   |
+| `npm run test`                                              | รัน Vitest unit tests แบบ offline ทั้ง `frontend` และ `backend`                 |
+| `npm run test:watch`                                        | รัน Vitest โหมด watch ครอบคลุมทั้ง 2 workspace ผ่าน `vitest.config.ts`            |
+| `npm --workspace=frontend run test -- path/to/file.test.ts` | รันเทสทีละไฟล์ฝั่ง `frontend` (เปลี่ยนเป็น `--workspace=backend` สำหรับฝั่ง backend)    |
+| `npm run skills:sync:matt`                                  | ติดตั้ง/ซิงก์ Matt Pocock Core 12 สกิลลง `.agents/skills/`                         |
+| `npm run skills:sync:ui`                                    | ติดตั้ง/ซิงก์ UI/UX Pro Max สกิลลง `.agents/skills/`                               |
+| `npm run skills:sync`                                       | รันทั้ง `skills:sync:matt` และ `skills:sync:ui` ต่อเนื่องกัน                        |
+
+### 2. Backend & `@google/clasp` v3 Scripts (`backend/package.json`)
+
+สามารถเรียกผ่าน root (`npm run gas:*`) หรือระบุ `--workspace=backend` ได้โดยตรง:
+
+| คำสั่งจาก Root                            | คำสั่งจริงใน `backend/package.json`                         | คำอธิบาย                                                                            |
+| --------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `npm --workspace=backend run build`     | `tsc --noEmit && node build.mjs`                         | Typecheck และ bundle `src/main.ts` → `dist/Code.js` + คัดลอก `dist/appsscript.json` |
+| `npm --workspace=backend run typecheck` | `tsc --noEmit`                                           | ตรวจ TypeScript ฝั่ง backend พร้อม `@types/google-apps-script`                        |
+| `npm --workspace=backend run lint`      | `eslint .`                                               | รัน ESLint บน `src/**/*.ts` และ `build.mjs`                                         |
+| `npm --workspace=backend run test`      | `vitest run`                                             | รัน offline unit tests ใน `backend/src/`                                            |
+| `npm run gas:login`                     | `clasp login`                                            | ล็อกอินบัญชี Google สำหรับ `@google/clasp`                                              |
+| `npm run gas:status`                    | `clasp show-file-status`                                 | แสดงรายการไฟล์ใน `dist/` ที่ `clasp` track สำหรับการ push                              |
+| `npm run gas:push`                      | `npm run build && clasp push`                            | Build `backend/dist/` แล้วอัปโหลดขึ้น Google Apps Script                               |
+| `npm run gas:pull`                      | `clasp pull`                                             | ดึงไฟล์ล่าสุดจาก Google Apps Script                                                    |
+| `npm run gas:open`                      | `clasp open-script`                                      | เปิดโปรเจกต์ใน Apps Script Editor บนเบราว์เซอร์                                        |
+| `npm run gas:deploy`                    | `npm run build && clasp push && clasp create-deployment` | Build, push และสร้าง Web App deployment ใหม่                                         |
+
+---
 
 ## Security & Gitignore Guardrails
 
-The following sensitive or local-only paths are ignored in `.gitignore` and must never be committed:
+ไฟล์ความลับและไฟล์ทำงานเฉพาะเครื่องต่อไปนี้ถูกดักใน `.gitignore` และห้าม commit ขึ้น Git โดยเด็ดขาด:
 
-- `.env*` (except `.env.example`)
-- `.clasp.json` and `.clasprc.json` (only `backend/.clasp.json.example` is tracked)
-- `.scratch/` (local specs and tickets)
+- `.env*` (ยกเว้น `.env.example`)
+- `.clasp.json` และ `.clasprc.json` (track เฉพาะ `backend/.clasp.json.example`)
+- `.scratch/` (ที่พัก Specs และ Tickets แบบ local)
 - `node_modules/`, `dist/`, `build/`
