@@ -18,7 +18,7 @@ Run these exact commands from the repository root (do not guess scripts):
 - **Typecheck:** `npm run typecheck`
 - **Lint & Format:** `npm run lint && npm run format:check`
 - **Production Build:** `npm run build` (builds both `frontend/dist/` and `backend/dist/`)
-- **Browser QA:** Use **Playwright CLI** (`npx playwright-cli`, preferred for token efficiency) or **Playwright MCP** (`.mcp.json`) to verify UI, responsive layouts, interactions, and GAS API integration — choose one per session (do not use both simultaneously).
+- **Browser QA:** Use **Playwright CLI** (`npx playwright-cli`, preferred for token efficiency) or **Playwright MCP** (`.mcp.json`) to verify UI, responsive layouts, interactions, and actual GAS API response reading in a real browser (across the `script.googleusercontent.com` redirect and CORS) before concluding GAS integration works — choose one per session (do not use both simultaneously).
 
 ## Source of Truth (Read on Demand)
 
@@ -43,5 +43,5 @@ Do NOT read all docs upfront. Load only when relevant to the current task:
 - Never read, print, or commit `.env*`, `.clasp.json`, `.clasprc.json`, Spreadsheet IDs, or API secrets.
 - Never run destructive Sheet operations, `npm run gas:push`, or `npm run gas:deploy` without explicit user confirmation.
 - Do not manually edit generated or dependency directories (`node_modules/`, `dist/`, `build/`).
-- No `useEffect` + `fetch` in `frontend/` — use `gasClient` + TanStack Query hooks only.
-- Batch Sheets I/O only, call `.setNumberFormat("@")` before `.setValues()` on string/code columns, wrap writes in `LockService.getScriptLock()` (`finally` release), and sanitize formula injection (`=`, `+`, `-`, `@`).
+- No `useEffect` + `fetch` in `frontend/` — use `gasClient` + TanStack Query hooks only; send GAS `POST` as `text/plain;charset=utf-8` or `application/x-www-form-urlencoded` without unnecessary custom headers (avoid CORS preflight).
+- Batch Sheets I/O only, preserve leading-zero strings end-to-end (`String(value ?? '')` + `.setNumberFormat("@")` before `.setValues()`), wrap writes in `LockService.getScriptLock()` (`finally` release), sanitize formula injection (`=`, `+`, `-`, `@`), and respect official GAS quotas without premature quota-management frameworks.

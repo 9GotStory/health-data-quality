@@ -9,16 +9,16 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
 - **Frontend (`frontend/`):**
   - **React 19 + Vite 7 + TypeScript + Tailwind CSS v4**
   - **TanStack Query v5** ตั้งค่า default ให้เหมาะกับโควตาและ cold-start ของ GAS (`refetchOnWindowFocus: false`, `staleTime: 5 * 60 * 1000`, `retry: 1`) ใน `frontend/src/lib/queryClient.ts`
-  - **Single GAS API Client** (`frontend/src/api/gasClient.ts`) ส่ง `POST` ด้วย `Content-Type: text/plain;charset=utf-8` เพื่อเลี่ยง CORS preflight ของ GAS และ validate response JSON จาก `unknown` ทุกครั้ง
+  - **Single GAS API Client** (`frontend/src/api/gasClient.ts`) ส่ง `POST` แบบ simple request (`Content-Type: text/plain;charset=utf-8` หรือ `application/x-www-form-urlencoded`) โดยไม่ใส่ Custom Headers เกินจำเป็นเพื่อเลี่ยง CORS preflight ของ GAS และ validate response JSON จาก `unknown` ทุกครั้ง
   - **นโยบาย Routing:** ยังไม่ติดตั้ง `react-router` ล่วงหน้าเพื่อให้ Single-Page App เบาที่สุด หาก Spec ต้องการหลายหน้า/หลาย URL ให้ติดตั้งและใช้ `react-router` เป็นมาตรฐาน
 - **Backend (`backend/`):**
-  - **TypeScript + `@types/google-apps-script`** แยก entrypoint (`backend/src/main.ts`) และ pure logic (`backend/src/sheetsLogic.ts`) ออกจากกันชัดเจน ไม่ต้องเขียน logic ซ้ำสองที่
+  - **TypeScript + `@types/google-apps-script`** แยก entrypoint (`backend/src/main.ts` รองรับ `doGet`/`doPost` ตามความเหมาะสม) และ pure logic (`backend/src/sheetsLogic.ts`) ออกจากกันชัดเจน ไม่ต้องเขียน logic ซ้ำสองที่
   - **Bundle ด้วย `esbuild`** (`backend/build.mjs`) ออกเป็น `backend/dist/Code.js` (พร้อม global footer `doGet(e)` / `doPost(e)` สำหรับ Apps Script V8) และคัดลอก `backend/appsscript.json` ลง `backend/dist/appsscript.json`
   - **Deploy ด้วย `@google/clasp` v3** (ติดตั้งเป็น devDependency ใน `backend/` พร้อมใช้งานทันที) ชี้ `srcDir: "dist"` / `rootDir: "dist"` ทำให้ `clasp` track เฉพาะไฟล์ที่ build แล้ว ไม่หลุดไฟล์เทสหรือ config ขึ้น GAS
 - **Quality & Verification:**
   - **Vitest** (ครอบคลุมทั้ง `frontend/` แบบ `jsdom` + Testing Library และ `backend/` แบบ `node` offline) + **ESLint** + **Prettier** + **TypeScript (`tsc --noEmit`)** + **Vite build + esbuild GAS bundle**
-  - **Browser QA ด้วย Playwright CLI / MCP:** ใช้ `npx playwright-cli` (ประหยัด token) หรือ **Playwright MCP** ใน `.mcp.json` เลือกใช้อย่างใดอย่างหนึ่งสำหรับตรวจ UI, Responsive, Interaction และ GAS API Integration (ไม่ต้องใช้ทั้งสองตัวพร้อมกัน และยังไม่เพิ่ม Playwright E2E test suite ล่วงหน้า)
-  - การันตีพฤติกรรม GAS runtime ตามมาตรฐาน: ล็อกการเขียนด้วย `LockService.getScriptLock().tryLock()` และปลดล็อกใน `finally`, เรียก `.setNumberFormat("@")` ก่อน `.setValues()` ในคอลัมน์รหัส/เลข 0 นำหน้า, กัน Formula Injection (`=`, `+`, `-`, `@`) และคืน JSON envelope (`{ ok: true, data }` / `{ ok: false, error }`) ทุก path
+  - **Browser QA ด้วย Playwright CLI / MCP:** ใช้ `npx playwright-cli` (ประหยัด token) หรือ **Playwright MCP** ใน `.mcp.json` เลือกใช้อย่างใดอย่างหนึ่งสำหรับตรวจ UI, Responsive, Interaction และการอ่าน Response จาก GAS ผ่าน Browser จริง (ยืนยันว่าผ่าน CORS และ HTTP `302` redirect ไป `script.googleusercontent.com` ได้ JSON ถูกต้อง ไม่ติดหน้า Login HTML) ก่อนสรุปว่าใช้งานได้ (ไม่ต้องใช้ทั้งสองตัวพร้อมกัน และยังไม่เพิ่ม Playwright E2E test suite ล่วงหน้า)
+  - การันตีพฤติกรรม GAS runtime ตามเอกสารทางการ: ใช้ Batch Read/Write และล็อกการเขียนพร้อมกันด้วย `LockService.getScriptLock().tryLock()` + ปลดล็อกใน `finally`, คงรหัสที่มีเลข 0 นำหน้า (เช่น `054`, `00123`) เป็น String ตลอดระบบ (`String(value ?? '')` + `.setNumberFormat("@")` ก่อน `.setValues()`), กัน Formula Injection (`=`, `+`, `-`, `@`), คืน JSON envelope (`{ ok: true, data }` / `{ ok: false, error }`) เพราะ `ContentService` ตั้ง HTTP status code หรือ custom response headers เองไม่ได้ และคำนึงถึง [GAS Quotas](https://developers.google.com/apps-script/guides/services/quotas) (6 นาที/execution, 30 concurrent/user, 1,000/script) โดยไม่สร้างระบบจัดการโควตาซับซ้อนล่วงหน้า
 - **AI Tooling & Docs:**
   - `AGENTS.md` (พร้อม symlink `CLAUDE.md -> AGENTS.md`) แบบ Read on Demand, `CODING_STANDARDS.md` (แบ่ง Capabilities เป็น Core / Optional / Project-Specific), `GLOSSARY.md`, `docs/adr/0000-template.md`
   - `.mcp.json` ตั้งค่า **Context7 MCP** (`@upstash/context7-mcp`) และ **Playwright MCP** (`@playwright/mcp@latest`) ร่วมกัน
@@ -104,7 +104,7 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
    ```bash
    npm run gas:login
    ```
-3. สร้างโปรเจกต์ใหม่ผูกกับ Google Sheets (หรือนำ `scriptId` ที่มีอยู่แล้วมาใส่ใน `backend/.clasp.json` โดยคง `"srcDir": "dist"` หรือ `"rootDir": "dist"`):
+3. สร้างโปรเจกต์ใหม่ผูกกับ Google Sheets (คำสั่งนี้จะสร้าง `backend/.clasp.json` ให้อัตโนมัติ) **หรือ** หากมี `scriptId` อยู่แล้วให้คัดลอก `backend/.clasp.json.example` เป็น `backend/.clasp.json` แล้วใส่ `scriptId` (คง `"srcDir": "dist"` หรือ `"rootDir": "dist"`):
    ```bash
    npx --workspace=backend clasp create-script --type sheets --title "My App" --rootDir dist
    ```
@@ -114,15 +114,21 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
    npm run gas:status
    ```
    > ผลลัพธ์จาก `npm run gas:status` (`clasp show-file-status`) ต้องแสดง **Tracked files** เฉพาะ `dist/Code.js` และ `dist/appsscript.json` เท่านั้น (ไม่รวมไฟล์เทสหรือ config)
-5. Push โค้ดและสร้าง Web App Deployment:
+5. Deploy Web App ครั้งแรก (`gas:deploy` จะรัน `build && clasp push && clasp create-deployment` ให้อัตโนมัติ):
    ```bash
-   npm run gas:push
    npm run gas:deploy
    ```
-6. เปิด Apps Script Editor เพื่อตั้งค่า `SPREADSHEET_ID` ใน **Project Settings → Script Properties** (กรณีใช้ standalone script) และคัดลอก Web App `/exec` URL ไปใส่ใน `frontend/.env` (`VITE_GAS_API_URL`):
+   - หากแก้ไขโค้ดภายหลังและต้องการ **อัปเดต Deployment เดิมโดยไม่เปลี่ยน `/exec` URL** ให้ push โค้ดแล้วอัปเดตด้วย `deploymentId` เดิม:
+     ```bash
+     npm run gas:push
+     npx --workspace=backend clasp list-deployments
+     npx --workspace=backend clasp update-deployment <deploymentId>
+     ```
+6. เปิด Apps Script Editor เพื่อตรวจสอบสิทธิ์ Deployment, ตั้งค่า `SPREADSHEET_ID` ใน **Project Settings → Script Properties** (กรณีใช้ standalone script) และคัดลอก Web App `/exec` URL ไปใส่ใน `frontend/.env` (`VITE_GAS_API_URL`):
    ```bash
    npm run gas:open
    ```
+   > **ข้อจำกัดด้านสิทธิ์เข้าถึง Web App (`backend/appsscript.json`):** ค่าเริ่มต้นตั้งเป็น `executeAs: "USER_DEPLOYING"` และ `access: "ANYONE_ANONYMOUS"` เพื่อให้ browser `fetch()` จาก React SPA เรียก `/exec` และตาม `302` redirect ไป `script.googleusercontent.com` ได้โดยไม่ติดหน้า Google Sign-In HTML (หากจำกัดสิทธิ์เป็น `MYSELF` / `DOMAIN` / `ANYONE` การเรียกข้ามโดเมนแบบไม่มี Google session จะได้หน้า Login HTML แทน JSON) — ทั้งนี้ `ANYONE_ANONYMOUS` เปิดให้เรียกได้จากภายนอก หากมีข้อมูลอ่อนไหวให้เพิ่ม Authentication/Authorization เป็น Project-Specific Requirement และทุกครั้งที่แก้โค้ดหรือเพิ่ม OAuth scopes ต้องอัปเดต Deployment จึงจะมีผลกับ `/exec` URL ([Google Web Apps Docs](https://developers.google.com/apps-script/guides/web) · [ContentService Docs](https://developers.google.com/apps-script/guides/content))
 7. รันหน้าเว็บทดสอบในเครื่อง:
    ```bash
    npm run dev

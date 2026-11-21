@@ -8,7 +8,7 @@
 Adopt capabilities pragmatically — keep the base template minimal and add optional packages only when required by an approved spec.
 
 - **Core (Required):** TypeScript Strict, ESLint, Prettier, Vitest, Playwright CLI/MCP (Browser QA), and TanStack Query.
-- **Optional (On Demand):** Zod / Validation Framework, Idempotency, Schema Management, React Router, shadcn/ui, Lucide, React Hook Form, TanStack Table, Pagination / Batch Processing, and Retry / Backoff.
+- **Optional (On Demand — add only when required by a real spec):** Zod / Advanced Validation, Idempotency, Schema Management, React Router, shadcn/ui, Lucide, React Hook Form, TanStack Table, Pagination / Batch Processing, and Retry / Backoff.
 - **Project-Specific:** Authentication / Authorization and domain-specific capabilities driven by business requirements.
 
 ## 1. Monorepo & API Boundaries (Hard Violations)
@@ -29,10 +29,11 @@ Adopt capabilities pragmatically — keep the base template minimal and add opti
 ## 3. Backend: Google Apps Script & Sheets (Hard Violations)
 
 - **[GAS-1] Batch Sheet I/O Only:** Never call `getValue()`, `setValue()`, or `appendRow()` inside a loop. Always read/write ranges in bulk with `getValues()` and `setValues()`.
-- **[GAS-2] Preserve String Columns Before Writing:** Always call `.setNumberFormat("@")` on target string ranges **before** calling `.setValues()` for columns that may contain leading zeros, IDs, or phone numbers, preventing Google Sheets from silently coercing values to numbers/dates.
+- **[GAS-2] Preserve String Columns & Leading Zeros:** Codes/IDs with leading zeros (e.g., `054`, `00123`, phone numbers) must remain `string` end-to-end across Frontend, API DTOs, and Sheets. Preserve `String(value ?? '')` on read/mapping (`backend/src/sheetsLogic.ts`) and always call `.setNumberFormat("@")` on target string ranges **before** `.setValues()` on write (`backend/src/main.ts`); never coerce these columns to `number` or strip leading zeros.
 - **[GAS-3] Lock Concurrent Writes:** Wrap state-mutating Sheet writes (create/update/delete) in `LockService.getScriptLock()` with a bounded `tryLock()` timeout and release in a `finally` block.
 - **[GAS-4] Centralized Column Schema:** Resolve columns via header mapping or a single schema definition rather than scattering hardcoded numeric column indices across handlers.
-- **[GAS-5] Explicit Response Envelope:** Every `doGet` / `doPost` path must return a consistent JSON shape (`{ ok: true, data }` or `{ ok: false, error }`) via `ContentService.createTextOutput(...).setMimeType(ContentService.MimeType.JSON)`.
+- **[GAS-5] `ContentService`, Redirects & Explicit Response Envelope:** Use `doGet` / `doPost` with `ContentService.createTextOutput(...).setMimeType(ContentService.MimeType.JSON)`. Per Google Official Documentation, `ContentService` cannot set custom HTTP status codes (e.g., `400`, `401`, `404`) or custom response headers, and Google redirects `/exec` via HTTP `302` to `script.googleusercontent.com` (clients must follow redirects). Every path must return `{ ok: true, data }` or `{ ok: false, error }`.
+- **[GAS-6] GAS Quotas (Pragmatic):** Respect official [Google Apps Script Quotas](https://developers.google.com/apps-script/guides/services/quotas) (6 min/execution standard runtime, 30 simultaneous executions/user, 1,000/script, and daily service quotas) via batch Sheets I/O (`[GAS-1]`) and TanStack Query defaults (`[FE-2]`). Do not build complex quota-management, queueing, or rate-limiter systems upfront unless an approved spec requires them.
 
 ## 4. Security & Data Integrity (Hard Violations)
 
@@ -44,10 +45,10 @@ Adopt capabilities pragmatically — keep the base template minimal and add opti
 
 - **[TEST-1] Test Behavior at Seams:** Write Vitest tests against public component behavior, API client contracts, and pure GAS transform functions. Do not assert on Tailwind utility class names or internal hook implementation details.
 - **[TEST-2] Isolated & Deterministic:** Mock network boundaries (`fetch`) in frontend tests and pass fake clocks/IDs where needed; tests must never hit a live GAS deployment or real Google Sheet.
-- **[TEST-3] Browser QA via Playwright CLI/MCP:** Use either Playwright CLI (`npx playwright-cli`) or Playwright MCP (`.mcp.json`)—never both simultaneously—to verify UI, responsive layouts, interactions, and GAS API integration. Do not add a full Playwright E2E test suite unless explicitly required by a spec.
+- **[TEST-3] Browser QA via Playwright CLI/MCP:** Use either Playwright CLI (`npx playwright-cli`) or Playwright MCP (`.mcp.json`)—never both simultaneously—to verify UI, responsive layouts, interactions, and actual GAS API response reading in a real browser (confirming CORS, the `script.googleusercontent.com` redirect, and valid JSON rather than an HTML login/error page) before concluding integration works. Do not add a full Playwright E2E test suite unless explicitly required by a spec.
 
 ## 6. Deliberate Exceptions (Do Not Flag)
 
-- **[EXC-1] GAS CORS `text/plain` POST Requests:** Sending JSON payloads from `frontend/` to GAS with `Content-Type: text/plain;charset=utf-8` (to bypass CORS preflight limitations in GAS Web Apps) is intentional. Do not flag this as an incorrect `Content-Type` header.
+- **[EXC-1] GAS CORS Simple `POST` Requests:** Sending `POST` payloads from `frontend/` to GAS with `Content-Type: text/plain;charset=utf-8` or `application/x-www-form-urlencoded` (without unnecessary custom request headers such as `Authorization` or `X-*`) is intentional to avoid CORS preflight (`OPTIONS`), which GAS Web Apps do not support. Do not flag this as an incorrect `Content-Type` header.
 - **[EXC-2] GAS Global Entrypoints & Bundle Footer:** Exporting `doGet` / `doPost` in `backend/src/main.ts` and re-exposing them as top-level global functions via `backend/build.mjs` footer (`dist/Code.js`) is required by the Apps Script V8 runtime and `@google/clasp` v3.
 - **[EXC-3] Intentional Type Duplication:** Duplicating small API DTO types between `frontend/` and `backend/` is acceptable when avoiding a shared build pipeline keeps GAS deployment simple.
