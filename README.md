@@ -2,6 +2,8 @@
 
 GitHub Base Template Repository แบบ Monorepo สำหรับสร้างเว็บแอปด้วย **React (Vite + TypeScript + Tailwind CSS + TanStack Query)** คู่กับ **Google Apps Script (GAS) Web App + Google Sheets** ที่เขียนด้วย TypeScript, bundle ด้วย **esbuild** และ deploy ผ่าน **`@google/clasp` v3** พร้อมวางระบบเอกสารและสกิลสำหรับ AI-Assisted Development ครบชุด
 
+> **หมายเหตุ (Base Template Scope):** Repository นี้เป็น **Base Template ที่ยังไม่ได้เชื่อมต่อ Google Apps Script หรือ Google Sheets จริง** การตรวจสอบตัว Template ให้ทำแบบ **Offline Verification เท่านั้น** (`npm ci`, `npm run check`, `npm run build`, ตรวจว่า `backend/dist/` มีเฉพาะ `Code.js` กับ `appsscript.json` และใช้ Playwright กับ Mock API) — AI Agent ต้องไม่สร้าง GAS Project, ผูก Google Sheets, รัน `clasp push`/`deploy` หรือร้องขอ Credentials เพื่อทดสอบ Base Template นี้
+
 ---
 
 ## Tech Stack & Tooling
@@ -17,7 +19,9 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
   - **Deploy ด้วย `@google/clasp` v3** (ติดตั้งเป็น devDependency ใน `backend/` พร้อมใช้งานทันที) ชี้ `srcDir: "dist"` / `rootDir: "dist"` ทำให้ `clasp` track เฉพาะไฟล์ที่ build แล้ว ไม่หลุดไฟล์เทสหรือ config ขึ้น GAS
 - **Quality & Verification:**
   - **Vitest** (ครอบคลุมทั้ง `frontend/` แบบ `jsdom` + Testing Library และ `backend/` แบบ `node` offline) + **ESLint** + **Prettier** + **TypeScript (`tsc --noEmit`)** + **Vite build + esbuild GAS bundle**
-  - **Browser QA ด้วย Playwright CLI / MCP:** ใช้ `npx playwright-cli` (ประหยัด token) หรือ **Playwright MCP** ใน `.mcp.json` เลือกใช้อย่างใดอย่างหนึ่งสำหรับตรวจ UI, Responsive, Interaction และการอ่าน Response จาก GAS ผ่าน Browser จริง (ยืนยันว่าผ่าน CORS และ HTTP `302` redirect ไป `script.googleusercontent.com` ได้ JSON ถูกต้อง ไม่ติดหน้า Login HTML) ก่อนสรุปว่าใช้งานได้ (ไม่ต้องใช้ทั้งสองตัวพร้อมกัน และยังไม่เพิ่ม Playwright E2E test suite ล่วงหน้า)
+  - **Browser QA ด้วย Playwright CLI / MCP:** ใช้ `npx playwright-cli` (ประหยัด token) หรือ **Playwright MCP** ใน `.mcp.json` เลือกใช้อย่างใดอย่างหนึ่ง (ไม่ต้องใช้พร้อมกัน และยังไม่เพิ่ม Playwright E2E test suite ล่วงหน้า)
+    - **ใน Base Template (Offline):** ใช้ **Mock API** ทดสอบ UI, Responsive และ Interactions โดยไม่ต้องเชื่อมต่อ GAS จริง
+    - **ในโปรเจกต์ที่เชื่อมต่อ GAS จริงแล้วเท่านั้น:** ทดสอบ CORS, HTTP `302` redirect ไป `script.googleusercontent.com` และการอ่าน JSON Response ผ่าน Browser จริงก่อนสรุปว่าใช้งานได้
   - การันตีพฤติกรรม GAS runtime ตามเอกสารทางการ: ใช้ Batch Read/Write และล็อกการเขียนพร้อมกันด้วย `LockService.getScriptLock().tryLock()` + ปลดล็อกใน `finally`, คงรหัสที่มีเลข 0 นำหน้า (เช่น `054`, `00123`) เป็น String ตลอดระบบ (`String(value ?? '')` + `.setNumberFormat("@")` ก่อน `.setValues()`), กัน Formula Injection (`=`, `+`, `-`, `@`), คืน JSON envelope (`{ ok: true, data }` / `{ ok: false, error }`) เพราะ `ContentService` ตั้ง HTTP status code หรือ custom response headers เองไม่ได้ และคำนึงถึง [GAS Quotas](https://developers.google.com/apps-script/guides/services/quotas) (6 นาที/execution, 30 concurrent/user, 1,000/script) โดยไม่สร้างระบบจัดการโควตาซับซ้อนล่วงหน้า
 - **AI Tooling & Docs:**
   - `AGENTS.md` (พร้อม symlink `CLAUDE.md -> AGENTS.md`) แบบ Read on Demand, `CODING_STANDARDS.md` (แบ่ง Capabilities เป็น Core / Optional / Project-Specific), `GLOSSARY.md`, `docs/adr/0000-template.md`
@@ -91,12 +95,13 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
    ```bash
    npm run skills:sync
    ```
-5. ตรวจสอบว่าทุกอย่างผ่านเขียวตั้งแต่เริ่มต้น (typecheck, lint, format, test และ build ทั้ง 2 workspace):
+5. ตรวจสอบว่าทุกอย่างผ่านเขียวแบบ Offline (`npm ci` สำหรับ clean install, `npm run check`, `npm run build` และตรวจว่า `backend/dist/` มีเพียง `Code.js` กับ `appsscript.json`):
    ```bash
    npm run check && npm run build
+   ls backend/dist
    ```
 
-### ขั้นที่ 2: ผูก Google Apps Script ด้วย `@google/clasp` v3
+### ขั้นที่ 2: ผูก Google Apps Script ด้วย `@google/clasp` v3 _(เฉพาะโปรเจกต์จริงที่สร้างจาก Template แล้วเท่านั้น)_
 
 1. เปิดใช้งาน **Google Apps Script API** ที่ [script.google.com/home/usersettings](https://script.google.com/home/usersettings)
 2. ล็อกอิน `clasp` ครั้งแรกในเครื่อง:

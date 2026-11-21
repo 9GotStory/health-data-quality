@@ -2,6 +2,7 @@
 
 ## Overview
 
+- **Status:** Base Template repository — **not connected to a live Google Apps Script project or Google Sheet**.
 - **Architecture:** Monorepo with a **React (Vite) + TypeScript + Tailwind CSS + TanStack Query** frontend consuming a **Google Apps Script (GAS) Web App API** (`TypeScript` + `esbuild` + `@google/clasp` v3) backed by Google Sheets.
 - **Key Directories:**
   - `frontend/` — React + Vite + TypeScript + Tailwind CSS + TanStack Query application
@@ -12,13 +13,14 @@
 
 Run these exact commands from the repository root (do not guess scripts):
 
+- **Base Template Verification (Offline):** `npm ci`, `npm run check`, `npm run build`, and confirm `backend/dist/` contains strictly `Code.js` and `appsscript.json`.
 - **Full check:** `npm run check` (runs `typecheck`, `lint`, `format:check`, and `test`)
 - **Test (single):** `npm --workspace=frontend run test -- path/to/file.test.ts` (or `--workspace=backend`)
 - **Test (full):** `npm run test`
 - **Typecheck:** `npm run typecheck`
 - **Lint & Format:** `npm run lint && npm run format:check`
 - **Production Build:** `npm run build` (builds both `frontend/dist/` and `backend/dist/`)
-- **Browser QA:** Use **Playwright CLI** (`npx playwright-cli`, preferred for token efficiency) or **Playwright MCP** (`.mcp.json`) to verify UI, responsive layouts, interactions, and actual GAS API response reading in a real browser (across the `script.googleusercontent.com` redirect and CORS) before concluding GAS integration works — choose one per session (do not use both simultaneously).
+- **Browser QA:** Use **Playwright CLI** (`npx playwright-cli`, preferred for token efficiency) or **Playwright MCP** (`.mcp.json`) — choose one per session (never both). In this Base Template, use a **Mock API** to verify UI, responsive layouts, and interactions without live GAS. Verify live GAS CORS, `script.googleusercontent.com` redirect, and JSON response reading in a real browser **only** in projects connected to a real GAS deployment.
 
 ## Source of Truth (Read on Demand)
 
@@ -41,7 +43,8 @@ Do NOT read all docs upfront. Load only when relevant to the current task:
 ## Hard Guardrails
 
 - Never read, print, or commit `.env*`, `.clasp.json`, `.clasprc.json`, Spreadsheet IDs, or API secrets.
-- Never run destructive Sheet operations, `npm run gas:push`, or `npm run gas:deploy` without explicit user confirmation.
+- **Base Template boundary:** Never create a GAS project, bind Google Sheets, run `clasp push`/`deploy` (`npm run gas:push`, `npm run gas:deploy`), or request Google credentials to test this Base Template.
+- Never run destructive Sheet operations, `npm run gas:push`, or `npm run gas:deploy` in connected projects without explicit user confirmation.
 - Do not manually edit generated or dependency directories (`node_modules/`, `dist/`, `build/`).
 - No `useEffect` + `fetch` in `frontend/` — use `gasClient` + TanStack Query hooks only; send GAS `POST` as `text/plain;charset=utf-8` or `application/x-www-form-urlencoded` without unnecessary custom headers (avoid CORS preflight).
 - Batch Sheets I/O only, preserve leading-zero strings end-to-end (`String(value ?? '')` + `.setNumberFormat("@")` before `.setValues()`), wrap writes in `LockService.getScriptLock()` (`finally` release), sanitize formula injection (`=`, `+`, `-`, `@`), and respect official GAS quotas without premature quota-management frameworks.
