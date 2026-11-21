@@ -83,10 +83,9 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
    ```bash
    npm install
    ```
-3. คัดลอกไฟล์ตัวอย่างสำหรับ config ภายในเครื่อง (ทั้งสองไฟล์ถูกดักใน `.gitignore` แล้ว):
+3. คัดลอกไฟล์ตัวอย่างสำหรับ config ฝั่ง frontend (ถูกดักใน `.gitignore` แล้ว — ส่วน `backend/.clasp.json` ให้จัดการในขั้นที่ 2):
    ```bash
    cp frontend/.env.example frontend/.env
-   cp backend/.clasp.json.example backend/.clasp.json
    ```
 4. _(ทางเลือก)_ อัปเดตสกิลใน `.agents/skills/` ให้เป็นเวอร์ชันล่าสุด:
    ```bash
@@ -104,11 +103,18 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
    ```bash
    npm run gas:login
    ```
-3. สร้างโปรเจกต์ใหม่ผูกกับ Google Sheets (คำสั่งนี้จะสร้าง `backend/.clasp.json` ให้อัตโนมัติ) **หรือ** หากมี `scriptId` อยู่แล้วให้คัดลอก `backend/.clasp.json.example` เป็น `backend/.clasp.json` แล้วใส่ `scriptId` (คง `"srcDir": "dist"` หรือ `"rootDir": "dist"`):
-   ```bash
-   npx --workspace=backend clasp create-script --type sheets --title "My App" --rootDir dist
-   ```
-4. Build ฝั่ง backend และตรวจรายการไฟล์ที่ `clasp` จะอัปโหลด:
+3. ผูกโปรเจกต์ Google Apps Script โดยเลือกทำ **อย่างใดอย่างหนึ่ง**:
+   - **กรณี A — สร้างโปรเจกต์ Apps Script ใหม่ (ไม่ต้องสร้าง `backend/.clasp.json` ล่วงหน้า):**
+     ```bash
+     npx --workspace=backend clasp create-script --type sheets --title "My App" --rootDir dist
+     ```
+     _(คำสั่งนี้จะสร้าง `backend/.clasp.json` ให้อัตโนมัติและดึงไฟล์เริ่มต้นลง `backend/dist/` หากมี `backend/.clasp.json` อยู่ก่อนคำสั่งจะ error)_
+   - **กรณี B — เชื่อมต่อโปรเจกต์ Apps Script เดิมที่มี `scriptId` อยู่แล้ว:**
+     ```bash
+     cp backend/.clasp.json.example backend/.clasp.json
+     ```
+     จากนั้นแก้ค่า `scriptId` ใน `backend/.clasp.json` โดยคง `"srcDir": "dist"` ไว้
+4. Build ฝั่ง backend (สคริปต์ `backend/build.mjs` จะล้างเฉพาะโฟลเดอร์ `backend/dist/` ก่อน build เพื่อกำจัดไฟล์ตกค้าง) แล้วตรวจรายการไฟล์ที่ `clasp` จะอัปโหลด:
    ```bash
    npm run build
    npm run gas:status
@@ -128,7 +134,7 @@ GitHub Base Template Repository แบบ Monorepo สำหรับสร้�
    ```bash
    npm run gas:open
    ```
-   > **ข้อจำกัดด้านสิทธิ์เข้าถึง Web App (`backend/appsscript.json`):** ค่าเริ่มต้นตั้งเป็น `executeAs: "USER_DEPLOYING"` และ `access: "ANYONE_ANONYMOUS"` เพื่อให้ browser `fetch()` จาก React SPA เรียก `/exec` และตาม `302` redirect ไป `script.googleusercontent.com` ได้โดยไม่ติดหน้า Google Sign-In HTML (หากจำกัดสิทธิ์เป็น `MYSELF` / `DOMAIN` / `ANYONE` การเรียกข้ามโดเมนแบบไม่มี Google session จะได้หน้า Login HTML แทน JSON) — ทั้งนี้ `ANYONE_ANONYMOUS` เปิดให้เรียกได้จากภายนอก หากมีข้อมูลอ่อนไหวให้เพิ่ม Authentication/Authorization เป็น Project-Specific Requirement และทุกครั้งที่แก้โค้ดหรือเพิ่ม OAuth scopes ต้องอัปเดต Deployment จึงจะมีผลกับ `/exec` URL ([Google Web Apps Docs](https://developers.google.com/apps-script/guides/web) · [ContentService Docs](https://developers.google.com/apps-script/guides/content))
+   > **ข้อจำกัดด้านสิทธิ์เข้าถึง Web App และ CORS (`backend/appsscript.json`):** ค่าเริ่มต้นตั้งเป็น `executeAs: "USER_DEPLOYING"` และ `access: "ANYONE_ANONYMOUS"` เพื่อลดโอกาสที่คำขอข้ามโดเมนจะถูกส่งไปหน้า Google Sign-In HTML (เช่นกรณีจำกัดสิทธิ์เป็น `MYSELF` / `DOMAIN` / `ANYONE` โดยไม่มี Google session) **แต่การตั้งค่า `ANYONE_ANONYMOUS` เพียงอย่างเดียวไม่ได้รับประกันว่า browser `fetch()` จะอ่าน JSON Response ได้สำเร็จ** (ยังขึ้นอยู่กับ CORS, HTTP `302` redirect ไป `script.googleusercontent.com`, รูปแบบ `Content-Type` / headers และนโยบายของ Google Workspace) — **ต้องทดสอบยืนยัน CORS, Redirect และการอ่าน JSON Response จาก Deployment จริงใน Browser ด้วย Playwright CLI/MCP ก่อนสรุปว่าใช้งานได้** ทั้งนี้ `ANYONE_ANONYMOUS` เปิดให้เรียกได้จากภายนอก หากมีข้อมูลอ่อนไหวให้เพิ่ม Authentication/Authorization เป็น Project-Specific Requirement และทุกครั้งที่แก้โค้ดหรือเพิ่ม OAuth scopes ต้องอัปเดต Deployment จึงจะมีผลกับ `/exec` URL ([Google Web Apps Docs](https://developers.google.com/apps-script/guides/web) · [ContentService Docs](https://developers.google.com/apps-script/guides/content))
 7. รันหน้าเว็บทดสอบในเครื่อง:
    ```bash
    npm run dev

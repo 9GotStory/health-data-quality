@@ -1,15 +1,21 @@
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
-mkdirSync('dist', { recursive: true });
+const backendDir = fileURLToPath(new URL('.', import.meta.url));
+const distDir = resolve(backendDir, 'dist');
+
+rmSync(distDir, { recursive: true, force: true });
+mkdirSync(distDir, { recursive: true });
 
 await build({
-  entryPoints: ['src/main.ts'],
+  entryPoints: [resolve(backendDir, 'src/main.ts')],
   bundle: true,
   format: 'iife',
   globalName: '_gasBundle',
   target: 'es2020',
-  outfile: 'dist/Code.js',
+  outfile: resolve(distDir, 'Code.js'),
   footer: {
     js: [
       '',
@@ -24,4 +30,4 @@ await build({
   },
 });
 
-copyFileSync('appsscript.json', 'dist/appsscript.json');
+copyFileSync(resolve(backendDir, 'appsscript.json'), resolve(distDir, 'appsscript.json'));
