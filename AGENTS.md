@@ -7,7 +7,7 @@
 - **Key Directories:**
   - `frontend/` — React + Vite + TypeScript + Tailwind CSS + TanStack Query application
   - `backend/` — TypeScript GAS Web App (`src/main.ts`, pure logic in `src/`, built to `dist/` and deployed via `@google/clasp`)
-  - `.scratch/` — Local workspace for specs and tickets (`/to-spec`, `/to-tickets`, gitignored)
+  - `.scratch/` — Gitignored local drafts for specs and tickets; published specs and tracked tickets live in GitHub Issues.
 
 ## Verification Commands
 
@@ -30,7 +30,7 @@ Do NOT read all docs upfront. Load only when relevant to the current task:
 - `GLOSSARY.md` — Read before `/grill-with-docs`, domain modeling, or writing specs to keep Sheet/UI terminology aligned.
 - `docs/adr/` — Check Architecture Decision Records (`0000-template.md`) before changing API contracts, Sheet schemas, or structural patterns.
 - `design-system/` — Read `design-system/<project>/MASTER.md` and relevant `design-system/<project>/pages/` files (generated via `/ui-ux-pro-max`) before designing or building UI pages.
-- `.scratch/` — Check active specs and tickets before starting `/implement`.
+- Before `/implement`, fetch the approved GitHub issue using `docs/agents/issue-tracker.md`; consult `.scratch/` for supporting drafts when present.
 - **Context7 MCP:** Use Context7 (`resolve-library-id` -> `query-docs`) to fetch up-to-date docs for libraries/frameworks (React, TanStack Query, React Router, Tailwind CSS, Vite, Vitest, `@google/clasp`) instead of guessing APIs.
 
 ## Workflow & Routing Conventions
@@ -48,3 +48,21 @@ Do NOT read all docs upfront. Load only when relevant to the current task:
 - Do not manually edit generated or dependency directories (`node_modules/`, `dist/`, `build/`).
 - No `useEffect` + `fetch` in `frontend/` — use `gasClient` + TanStack Query hooks only; send GAS `POST` as `text/plain;charset=utf-8` or `application/x-www-form-urlencoded` without unnecessary custom headers (avoid CORS preflight).
 - Batch Sheets I/O only, preserve leading-zero strings end-to-end (`String(value ?? '')` + `.setNumberFormat("@")` before `.setValues()`), wrap writes in `LockService.getScriptLock()` (`finally` release), sanitize formula injection (`=`, `+`, `-`, `@`), and respect official GAS quotas without premature quota-management frameworks.
+
+## Agent skills
+
+### Issue tracker
+
+Track issues and published specs in GitHub Issues for
+`9GotStory/health-data-quality`. Before tracker operations, read
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five default triage labels. Before triaging or changing labels,
+read `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use a single-context layout: root `GLOSSARY.md` and `docs/adr/`.
+Before domain exploration, read `docs/agents/domain.md`.
