@@ -2,7 +2,10 @@
 import { expect, it } from 'vitest';
 import complete from '../qa/fixtures/complete/PERSON.TXT?raw';
 import missing from '../qa/fixtures/missing/PERSON.TXT?raw';
-import { inspectPersonTxt, personReference } from './personHeader';
+import { inspectTxt as inspectPersonTxt } from './inspectTxt';
+import { fileReferences } from './structureReference';
+
+const personReference = fileReferences.find(({ name }) => name === 'PERSON')!;
 
 it('finds all 34 referenced names without including record values in the report', async () => {
   const file = new File([complete], 'PERSON.TXT');

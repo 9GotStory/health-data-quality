@@ -1,53 +1,6 @@
-interface PersonReference {
-  readonly version: string;
-  readonly source: string;
-  readonly url: string;
-  readonly columns: readonly string[];
-}
+import type { FileReference } from './structureReference';
 
-export const personReference: PersonReference = {
-  version: 'PERSON-header-1',
-  source: 'คู่มือโครงสร้างข้อมูล 43 แฟ้ม รุ่น 2.4.1 หน้า PDF 6–9',
-  url: 'https://hdata.moph.go.th/site/wp-content/uploads/2025/04/43-file-Structure_Version-2.4.128.04.68.pdf#page=6',
-  columns: [
-    'HOSPCODE',
-    'CID',
-    'PID',
-    'HID',
-    'PRENAME',
-    'NAME',
-    'LNAME',
-    'HN',
-    'SEX',
-    'BIRTH',
-    'MSTATUS',
-    'OCCUPATION_OLD',
-    'OCCUPATION_NEW',
-    'RACE',
-    'NATION',
-    'RELIGION',
-    'EDUCATION',
-    'FSTATUS',
-    'FATHER',
-    'MOTHER',
-    'COUPLE',
-    'VSTATUS',
-    'MOVEIN',
-    'DISCHARGE',
-    'DDISCHARGE',
-    'ABOGROUP',
-    'RHGROUP',
-    'LABOR',
-    'PASSPORT',
-    'TYPEAREA',
-    'D_UPDATE',
-    'TELEPHONE',
-    'MOBILE',
-    'HOSPCODE9',
-  ],
-};
-
-function inspectColumns(names: string[], reference: PersonReference) {
+function inspectColumns(names: string[], reference: FileReference) {
   const positions = new Map<string, number[]>();
   const extraColumns: number[] = [];
   let lastPosition = -1;
@@ -90,8 +43,18 @@ function requiredValueStatus(value: string | undefined) {
   return 'present';
 }
 
-export async function inspectPersonTxt(file: File, reference: PersonReference) {
-  const bytes = await file.arrayBuffer();
+export async function inspectTxt(file: File, reference: FileReference) {
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await file.arrayBuffer();
+  } catch {
+    return {
+      fileName: file.name,
+      reference,
+      status: 'unreadable' as const,
+      reason: 'read-failed' as const,
+    };
+  }
   const base = { fileName: file.name, reference };
   let text: string;
   try {
@@ -107,7 +70,7 @@ export async function inspectPersonTxt(file: File, reference: PersonReference) {
   if (text.endsWith('\n')) lines.pop();
   const names = header.split('|');
   const { bindings, ...columnReport } = inspectColumns(names, reference);
-  const hospcode9Index = bindings.indexOf('HOSPCODE9');
+  const hospcode9Index = reference.name === 'PERSON' ? bindings.indexOf('HOSPCODE9') : -1;
   const rows = lines.map((record, index) => {
     const line = index + 2;
     if (record === '') return { line, status: 'blank' as const };

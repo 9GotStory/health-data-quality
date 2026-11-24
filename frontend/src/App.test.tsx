@@ -15,7 +15,7 @@ it('selects a local PERSON file and reports missing names without contacting the
   render(<App />);
 
   const file = new File(['PID|HOSPCODE\n00042|00123'], 'PERSON.TXT');
-  fireEvent.change(screen.getByLabelText('เลือกไฟล์ PERSON.TXT'), { target: { files: [file] } });
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), { target: { files: [file] } });
 
   expect(await screen.findByText('HOSPCODE9')).toBeVisible();
   expect(screen.getByText('PERSON-header-1')).toBeVisible();
@@ -27,7 +27,7 @@ it('selects a local PERSON file and reports missing names without contacting the
 it('shows the physical line, cause and scope of each limitation alongside independent results', async () => {
   render(<App />);
   const file = new File(['PID|PID|HOSPCODE9\n01|02|\r\n\n01|02\n01|02| '], 'PERSON.TXT');
-  fireEvent.change(screen.getByLabelText('เลือกไฟล์ PERSON.TXT'), { target: { files: [file] } });
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), { target: { files: [file] } });
   expect(await screen.findByText('แถวข้อมูล 4 แถว · อ่านได้ 2 · อ่านไม่ได้ 2')).toBeVisible();
   expect(screen.getByText(/IO-11.*PID.*ตรวจไม่ได้/)).toBeVisible();
   expect(screen.getByText(/บรรทัด 2.*PER-REQUIRED.*HOSPCODE9/)).toBeVisible();
@@ -39,14 +39,14 @@ it('shows the physical line, cause and scope of each limitation alongside indepe
 it('explains once why missing HOSPCODE9 blocks its row rule while readable rows still count', async () => {
   render(<App />);
   const file = new File(['PID\n1\n2'], 'PERSON.TXT');
-  fireEvent.change(screen.getByLabelText('เลือกไฟล์ PERSON.TXT'), { target: { files: [file] } });
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), { target: { files: [file] } });
   expect(await screen.findByText(/PER-REQUIRED.*ตรวจไม่ได้.*ขาดคอลัมน์ HOSPCODE9/)).toBeVisible();
   expect(screen.getByText('แถวข้อมูล 2 แถว · อ่านได้ 2 · อ่านไม่ได้ 0')).toBeVisible();
 });
 
 it('IT-22/23 shows the reordered complete header and distinguishes an extra position from a missing name', async () => {
   render(<App />);
-  const input = screen.getByLabelText('เลือกไฟล์ PERSON.TXT');
+  const input = screen.getByLabelText('เลือกไฟล์ TXT');
   const names = complete.split(/\r?\n/, 1)[0].split('|');
   const reordered = ['HOSPCODE9', ...names.slice(0, -1)].join('|');
   const values = ['', ...Array(33).fill('1')].join('|');
@@ -61,4 +61,63 @@ it('IT-22/23 shows the reordered complete header and distinguishes an extra posi
   expect(await screen.findByText(/IO-10.*คอลัมน์เพิ่มเติมที่ตำแหน่ง 34/)).toBeVisible();
   expect(screen.getByRole('list', { name: 'ชื่อคอลัมน์ที่ขาด' })).toHaveTextContent('HOSPCODE9');
   expect(screen.queryByText(/ลำดับคอลัมน์ต่างจากทะเบียน/)).not.toBeInTheDocument();
+});
+
+it('reports all 43 submission statuses and local details for a partial multi-TXT selection', async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  render(<App />);
+  const files = [
+    new File(['HID|HOSPCODE\nSYNTHETIC-PRIVATE|00001'], 'hOmE.TxT'),
+    new File(['HOSPCODE'], 'ICF.TXT'),
+    new File(['private supplement'], 'POLICY.txt'),
+  ];
+  const input = screen.getByLabelText('เลือกไฟล์ TXT');
+  expect(input).toHaveAttribute('multiple');
+  fireEvent.change(input, { target: { files } });
+  const coverage = await screen.findByRole('list', { name: 'สถานะการส่ง 43 แฟ้มหลัก' });
+  expect(coverage.children).toHaveLength(43);
+  expect(coverage).toHaveTextContent('PERSON · ไม่ได้ส่ง');
+  expect(coverage).toHaveTextContent('HOME · มีข้อมูล');
+  expect(coverage).toHaveTextContent('ICF · มีเฉพาะหัวตาราง');
+  expect(screen.getByText('POLICY.txt')).toBeVisible();
+  expect(screen.getByText(/แฟ้มหลักที่ส่ง 2 จาก 43 แฟ้ม/)).toBeVisible();
+  expect(coverage).toHaveTextContent('DATE_SERRV');
+  expect(coverage).toHaveTextContent('HOSPCODE9');
+  expect(coverage).toHaveTextContent(/ลำดับคอลัมน์ต่างจากทะเบียน/);
+  expect(coverage).toHaveTextContent(/ตรวจความหมาย.*ตรวจไม่ได้/);
+  expect(document.body).not.toHaveTextContent('SYNTHETIC-PRIVATE');
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('marks duplicate basenames ambiguous and checks the independent file in the same round', async () => {
+  render(<App />);
+  const files = [
+    new File(['HOSPCODE'], 'one/PERSON.TXT'),
+    new File(['HOSPCODE9'], 'two/person.txt'),
+    new File(['HOSPCODE'], 'sErViCe.txt'),
+  ];
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), { target: { files } });
+  const coverage = await screen.findByRole('list', { name: 'สถานะการส่ง 43 แฟ้มหลัก' });
+  expect(coverage).toHaveTextContent('PERSON · ชื่อแฟ้มซ้ำ 2 ไฟล์');
+  expect(coverage).toHaveTextContent('SERVICE · มีเฉพาะหัวตาราง');
+  expect(coverage).not.toHaveTextContent('PER-REQUIRED');
+  expect(screen.getAllByRole('list', { name: 'ชื่อคอลัมน์ที่ขาด', hidden: true })).toHaveLength(1);
+});
+
+it('keeps SERVICE position 2 unresolved and requires the exact ICF spelling from the manual', async () => {
+  render(<App />);
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), {
+    target: {
+      files: [
+        new File(['HOSPCODE|PID|HN\n00001|001|\n00002|002|'], 'SERVICE.txt'),
+        new File(['HOSPCODE|DATE_SERV'], 'ICF.txt'),
+      ],
+    },
+  });
+  const coverage = await screen.findByRole('list', { name: 'สถานะการส่ง 43 แฟ้มหลัก' });
+  expect(coverage).toHaveTextContent(/ตำแหน่งที่ 2.*คู่มือไม่ระบุชื่อ.*ตรวจไม่ได้/);
+  expect(coverage).toHaveTextContent('DATE_SERRV');
+  expect(coverage).not.toHaveTextContent('PER-REQUIRED');
+  expect(coverage).not.toHaveTextContent('ต้องมีค่า');
 });

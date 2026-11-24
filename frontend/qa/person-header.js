@@ -2,7 +2,7 @@
 // npx playwright-cli run-code --filename=frontend/qa/person-header.js
 async function verifyPersonHeader(page) {
   await page.reload({ waitUntil: 'networkidle' });
-  const input = page.getByLabel('เลือกไฟล์ PERSON.TXT');
+  const input = page.getByLabel('เลือกไฟล์ TXT');
   async function verifyViewport() {
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) {
       throw new Error('Report overflows the viewport');
@@ -56,10 +56,43 @@ async function verifyPersonHeader(page) {
         if (await page.getByText(/private|001/).count()) throw new Error('Raw data in report');
         await verifyViewport();
       }
+      const txt = (name, body) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(body) });
+      await input.setInputFiles([
+        txt('hOmE.TxT', 'HID|HOSPCODE\nSYNTHETIC-PRIVATE|00001'),
+        txt('ICF.txt', 'HOSPCODE|DATE_SERV'),
+        txt('SERVICE.txt', 'HOSPCODE|PID'),
+        txt('PERSON.txt', 'PID'),
+        txt('person.TXT', 'PID'),
+        txt('POLICY.txt', 'SYNTHETIC-SUPPLEMENT'),
+      ]);
+      const coverage = page.getByRole('list', { name: 'สถานะการส่ง 43 แฟ้มหลัก' });
+      await page.getByText(/แฟ้มหลักที่ส่ง 4 จาก 43 แฟ้ม/).waitFor();
+      if ((await coverage.locator(':scope > li').count()) !== 43)
+        throw new Error('Incomplete coverage');
+      await page.getByText(/PERSON · ชื่อแฟ้มซ้ำ 2/).waitFor();
+      await page.getByText('POLICY.txt', { exact: true }).waitFor();
+      const home = coverage
+        .locator('details')
+        .filter({ has: page.locator('summary', { hasText: /^HOME · มีข้อมูล/ }) });
+      await home.locator('summary').click();
+      await home.getByText(/ลำดับคอลัมน์ต่างจากทะเบียน/).waitFor();
+      await home.getByText('HOSPCODE9', { exact: true }).waitFor();
+      const icf = coverage
+        .locator('details')
+        .filter({ has: page.locator('summary', { hasText: /^ICF · มีเฉพาะหัวตาราง/ }) });
+      await icf.locator('summary').click();
+      await icf.getByText('DATE_SERRV', { exact: true }).waitFor();
+      const service = coverage
+        .locator('details')
+        .filter({ has: page.locator('summary', { hasText: /^SERVICE ·/ }) });
+      await service.locator('summary').click();
+      await service.getByText(/ตำแหน่งที่ 2 · คู่มือไม่ระบุชื่อคอลัมน์/).waitFor();
+      if (await page.getByText(/SYNTHETIC-/).count()) throw new Error('Raw data in report');
+      await verifyViewport();
     }
     if (requestCount) throw new Error('Selecting a local file triggered a network request');
   } finally {
     page.off('request', countRequest);
   }
-  return 'Six PERSON reports verified at two viewport sizes, zero file-selection requests';
+  return 'Single- and multi-TXT reports verified at two viewport sizes, zero file-selection requests';
 }
