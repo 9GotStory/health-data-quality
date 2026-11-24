@@ -3,19 +3,25 @@ import type { FileReference } from './structureReference';
 function inspectColumns(names: string[], reference: FileReference) {
   const positions = new Map<string, number[]>();
   const extraColumns: number[] = [];
-  let lastPosition = -1;
-  let reordered = false;
   for (const [index, name] of names.entries()) {
     const columns = positions.get(name);
     if (columns) columns.push(index + 1);
     else positions.set(name, [index + 1]);
-
-    const referencePosition = reference.columns.indexOf(name);
-    if (referencePosition === -1) extraColumns.push(index + 1);
-    else if (!columns) {
-      if (referencePosition < lastPosition) reordered = true;
-      lastPosition = referencePosition;
+    if (!reference.columns.includes(name)) extraColumns.push(index + 1);
+  }
+  const bindings = names.map((name) =>
+    reference.columns.includes(name) && positions.get(name)?.length === 1 ? name : undefined,
+  );
+  let lastPosition = -1;
+  let reordered = false;
+  for (const name of bindings) {
+    if (name === undefined) continue;
+    const position = reference.columns.indexOf(name);
+    if (position < lastPosition) {
+      reordered = true;
+      break;
     }
+    lastPosition = position;
   }
   const duplicates = Array.from(positions)
     .filter(([, columns]) => columns.length > 1)
@@ -24,9 +30,7 @@ function inspectColumns(names: string[], reference: FileReference) {
       columns,
     }));
   return {
-    bindings: names.map((name) =>
-      reference.columns.includes(name) && positions.get(name)?.length === 1 ? name : undefined,
-    ),
+    bindings,
     missing: reference.columns.filter((name) => !positions.has(name)),
     extraColumns,
     duplicates,

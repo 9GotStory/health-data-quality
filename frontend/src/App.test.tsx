@@ -121,3 +121,12 @@ it('keeps SERVICE position 2 unresolved and requires the exact ICF spelling from
   expect(coverage).not.toHaveTextContent('PER-REQUIRED');
   expect(coverage).not.toHaveTextContent('ต้องมีค่า');
 });
+
+it('reports ambiguous names independently from the order of uniquely bound columns', async () => {
+  render(<App />);
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), {
+    target: { files: [new File(['HOSPCODE9|HID|HOSPCODE9'], 'HOME.TXT')] },
+  });
+  expect(await screen.findByText(/IO-11.*HOSPCODE9.*1, 3/)).toBeVisible();
+  expect(screen.queryByText(/ลำดับคอลัมน์ต่างจากทะเบียน/)).not.toBeInTheDocument();
+});

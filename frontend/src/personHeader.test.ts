@@ -69,7 +69,9 @@ it('IT-05/08/10–12/17–19 counts physical lines, literal pipes and trailing f
 });
 
 it('IT-22–24 distinguishes missing, reordered, extra and ambiguous names without exposing input headers', async () => {
-  const result = await inspect('\ufeffPID|HOSPCODE|PID|HOSPCODE9 |private-extra|private-extra\n');
+  const result = await inspect(
+    '\ufeffPID|HOSPCODE|PID|HOSPCODE9 |private-extra|private-extra|PRENAME|CID\n',
+  );
   expect(result).toMatchObject({
     status: 'checked',
     extraColumns: [4, 5, 6],
