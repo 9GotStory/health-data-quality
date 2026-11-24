@@ -70,7 +70,7 @@ export async function inspectTxt(file: File, reference: FileReference) {
   if (text.endsWith('\n')) lines.pop();
   const names = header.split('|');
   const { bindings, ...columnReport } = inspectColumns(names, reference);
-  const hospcode9Index = reference.name === 'PERSON' ? bindings.indexOf('HOSPCODE9') : -1;
+  const hospcode9Index = reference.checksRequiredHospcode9 ? bindings.indexOf('HOSPCODE9') : -1;
   const rows = lines.map((record, index) => {
     const line = index + 2;
     if (record === '') return { line, status: 'blank' as const };

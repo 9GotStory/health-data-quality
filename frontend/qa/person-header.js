@@ -71,21 +71,19 @@ async function verifyPersonHeader(page) {
         throw new Error('Incomplete coverage');
       await page.getByText(/PERSON · ชื่อแฟ้มซ้ำ 2/).waitFor();
       await page.getByText('POLICY.txt', { exact: true }).waitFor();
-      const home = coverage
-        .locator('details')
-        .filter({ has: page.locator('summary', { hasText: /^HOME · มีข้อมูล/ }) });
-      await home.locator('summary').click();
+      async function openDetails(label) {
+        const details = coverage
+          .locator('details')
+          .filter({ has: page.locator('summary', { hasText: label }) });
+        await details.locator('summary').click();
+        return details;
+      }
+      const home = await openDetails(/^HOME · มีข้อมูล/);
       await home.getByText(/ลำดับคอลัมน์ต่างจากทะเบียน/).waitFor();
       await home.getByText('HOSPCODE9', { exact: true }).waitFor();
-      const icf = coverage
-        .locator('details')
-        .filter({ has: page.locator('summary', { hasText: /^ICF · มีเฉพาะหัวตาราง/ }) });
-      await icf.locator('summary').click();
+      const icf = await openDetails(/^ICF · มีเฉพาะหัวตาราง/);
       await icf.getByText('DATE_SERRV', { exact: true }).waitFor();
-      const service = coverage
-        .locator('details')
-        .filter({ has: page.locator('summary', { hasText: /^SERVICE ·/ }) });
-      await service.locator('summary').click();
+      const service = await openDetails(/^SERVICE ·/);
       await service.getByText(/ตำแหน่งที่ 2 · คู่มือไม่ระบุชื่อคอลัมน์/).waitFor();
       if (await page.getByText(/SYNTHETIC-/).count()) throw new Error('Raw data in report');
       await verifyViewport();

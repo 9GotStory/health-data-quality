@@ -83,7 +83,7 @@ function TxtResult({ report }: { report: Report }) {
     <>
       <h3 className="font-semibold">โครงสร้างตามมาตรฐาน · หัวตารางบรรทัด 1</h3>
       <HeaderResult report={report} />
-      {report.reference.name === 'PERSON' && report.missing.includes('HOSPCODE9') && (
+      {report.reference.checksRequiredHospcode9 && report.missing.includes('HOSPCODE9') && (
         <p>PER-REQUIRED · ตรวจไม่ได้ทุกแถว เพราะขาดคอลัมน์ HOSPCODE9</p>
       )}
       <h3 className="mt-5 font-semibold">ผลการอ่าน TXT ตามนโยบายเครื่องมือ Q20</h3>
@@ -103,7 +103,9 @@ function TxtResult({ report }: { report: Report }) {
       {report.duplicates.map(({ field, columns }) => (
         <p key={columns[0]}>
           IO-11 · บรรทัด 1 ชื่อคอลัมน์ซ้ำ {field} ที่ตำแหน่ง {columns.join(', ')} กฎที่ใช้ชื่อนี้ตรวจไม่ได้
-          {report.reference.name === 'PERSON' && field === 'HOSPCODE9' && ' รวมถึง PER-REQUIRED'}
+          {report.reference.checksRequiredHospcode9 &&
+            field === 'HOSPCODE9' &&
+            ' รวมถึง PER-REQUIRED'}
         </p>
       ))}
       {report.rows.length === 0 ? (
@@ -132,18 +134,15 @@ function FileDetails({ report }: { report: Report }) {
       <p className="break-all text-sm">ไฟล์ที่เลือก · {report.fileName}</p>
       <TxtResult report={report} />
       {reference.unknownPositions.map((position) => (
-        <p key={position}>
-          ตำแหน่งที่ {position} · คู่มือไม่ระบุชื่อคอลัมน์ จึงผูกค่ากับตำแหน่งนี้และตรวจตามชื่อไม่ได้ · ตรวจไม่ได้
-        </p>
+        <p key={position}>ตำแหน่งที่ {position} · คู่มือไม่ระบุชื่อคอลัมน์ กฎที่ต้องใช้ชื่อนี้จึงตรวจไม่ได้</p>
       ))}
-      {reference.name !== 'PERSON' && (
-        <p>การตรวจความหมาย · ตรวจไม่ได้ เพราะยังไม่เปิดใช้กฎรายแถวสำหรับแฟ้มนี้</p>
-      )}
-      {reference.name === 'PERSON' && (
+      {reference.checksRequiredHospcode9 ? (
         <p>
           ยังไม่พร้อมตรวจความหมายของข้อมูลรายแถวนอกเหนือจากการตรวจค่าว่างของ HOSPCODE9 ตาม PER-REQUIRED ·
           กฎอื่นตรวจไม่ได้
         </p>
+      ) : (
+        <p>การตรวจความหมาย · ตรวจไม่ได้ เพราะยังไม่เปิดใช้กฎรายแถวสำหรับแฟ้มนี้</p>
       )}
       <p className="text-sm">
         {reference.name === 'PERSON' ? 'PER-STRUCT' : 'IO-10'} · ตรวจชื่อคอลัมน์ตามทะเบียน ·{' '}

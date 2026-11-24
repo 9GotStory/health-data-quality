@@ -4,6 +4,7 @@ export const structureRegistry = registry;
 
 export const fileReferences = registry.files.map(({ name, firstPage, lastPage, positions }) => ({
   name,
+  checksRequiredHospcode9: name === 'PERSON',
   version: name === 'PERSON' ? 'PERSON-header-1' : registry.version,
   source: `คู่มือโครงสร้างข้อมูล 43 แฟ้ม รุ่น 2.4.1 หน้า PDF ${firstPage}–${lastPage}`,
   url: `${registry.sourceUrl}#page=${firstPage}`,
