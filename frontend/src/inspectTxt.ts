@@ -47,7 +47,10 @@ function requiredValueStatus(value: string | undefined) {
   return 'present';
 }
 
-export async function inspectTxt(file: File, reference: FileReference) {
+export async function inspectTxt(
+  file: Pick<File, 'name' | 'arrayBuffer'>,
+  reference: FileReference,
+) {
   let bytes: ArrayBuffer;
   try {
     bytes = await file.arrayBuffer();

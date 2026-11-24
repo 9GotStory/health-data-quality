@@ -15,7 +15,7 @@ it('selects a local PERSON file and reports missing names without contacting the
   render(<App />);
 
   const file = new File(['PID|HOSPCODE\n00042|00123'], 'PERSON.TXT');
-  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), { target: { files: [file] } });
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP'), { target: { files: [file] } });
 
   expect(await screen.findByText('HOSPCODE9')).toBeVisible();
   expect(screen.getByText('PERSON-header-1')).toBeVisible();
@@ -27,7 +27,7 @@ it('selects a local PERSON file and reports missing names without contacting the
 it('shows the physical line, cause and scope of each limitation alongside independent results', async () => {
   render(<App />);
   const file = new File(['PID|PID|HOSPCODE9\n01|02|\r\n\n01|02\n01|02| '], 'PERSON.TXT');
-  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), { target: { files: [file] } });
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP'), { target: { files: [file] } });
   expect(await screen.findByText('แถวข้อมูล 4 แถว · อ่านได้ 2 · อ่านไม่ได้ 2')).toBeVisible();
   expect(screen.getByText(/IO-11.*PID.*ตรวจไม่ได้/)).toBeVisible();
   expect(screen.getByText(/บรรทัด 2.*PER-REQUIRED.*HOSPCODE9/)).toBeVisible();
@@ -39,14 +39,14 @@ it('shows the physical line, cause and scope of each limitation alongside indepe
 it('explains once why missing HOSPCODE9 blocks its row rule while readable rows still count', async () => {
   render(<App />);
   const file = new File(['PID\n1\n2'], 'PERSON.TXT');
-  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), { target: { files: [file] } });
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP'), { target: { files: [file] } });
   expect(await screen.findByText(/PER-REQUIRED.*ตรวจไม่ได้.*ขาดคอลัมน์ HOSPCODE9/)).toBeVisible();
   expect(screen.getByText('แถวข้อมูล 2 แถว · อ่านได้ 2 · อ่านไม่ได้ 0')).toBeVisible();
 });
 
 it('IT-22/23 shows the reordered complete header and distinguishes an extra position from a missing name', async () => {
   render(<App />);
-  const input = screen.getByLabelText('เลือกไฟล์ TXT');
+  const input = screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP');
   const names = complete.split(/\r?\n/, 1)[0].split('|');
   const reordered = ['HOSPCODE9', ...names.slice(0, -1)].join('|');
   const values = ['', ...Array(33).fill('1')].join('|');
@@ -72,7 +72,7 @@ it('reports all 43 submission statuses and local details for a partial multi-TXT
     new File(['HOSPCODE'], 'ICF.TXT'),
     new File(['private supplement'], 'POLICY.txt'),
   ];
-  const input = screen.getByLabelText('เลือกไฟล์ TXT');
+  const input = screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP');
   expect(input).toHaveAttribute('multiple');
   fireEvent.change(input, { target: { files } });
   const coverage = await screen.findByRole('list', { name: 'สถานะการส่ง 43 แฟ้มหลัก' });
@@ -97,7 +97,7 @@ it('marks duplicate basenames ambiguous and checks the independent file in the s
     new File(['HOSPCODE9'], 'two/person.txt'),
     new File(['HOSPCODE'], 'sErViCe.txt'),
   ];
-  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), { target: { files } });
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP'), { target: { files } });
   const coverage = await screen.findByRole('list', { name: 'สถานะการส่ง 43 แฟ้มหลัก' });
   expect(coverage).toHaveTextContent('PERSON · ชื่อแฟ้มซ้ำ 2 ไฟล์');
   expect(coverage).toHaveTextContent('SERVICE · มีเฉพาะหัวตาราง');
@@ -107,7 +107,7 @@ it('marks duplicate basenames ambiguous and checks the independent file in the s
 
 it('keeps SERVICE position 2 unresolved and requires the exact ICF spelling from the manual', async () => {
   render(<App />);
-  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), {
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP'), {
     target: {
       files: [
         new File(['HOSPCODE|PID|HN\n00001|001|\n00002|002|'], 'SERVICE.txt'),
@@ -124,7 +124,7 @@ it('keeps SERVICE position 2 unresolved and requires the exact ICF spelling from
 
 it('reports ambiguous names independently from the order of uniquely bound columns', async () => {
   render(<App />);
-  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT'), {
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP'), {
     target: { files: [new File(['HOSPCODE9|HID|HOSPCODE9'], 'HOME.TXT')] },
   });
   expect(await screen.findByText(/IO-11.*HOSPCODE9.*1, 3/)).toBeVisible();

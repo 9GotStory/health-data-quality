@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from 'react';
 import type { inspectTxt } from './inspectTxt';
-import { inspectSelection, type SelectionReport } from './inspectSelection';
+import { inspectFiles, inspectZip, type SelectionReport } from './inspectSelection';
 import { structureRegistry } from './structureReference';
 
 type Report = Awaited<ReturnType<typeof inspectTxt>>;
@@ -190,6 +190,17 @@ function CoverageResult({ report }: { report: SelectionReport }) {
                 โปรดเลือกแฟ้มชื่อนี้เพียงไฟล์เดียว
               </li>
             );
+          if (entry.status === 'unavailable')
+            return (
+              <li key={entry.name} className="py-2">
+                <details open={report.submitted === 1}>
+                  <summary className="cursor-pointer font-semibold">{entry.name} · อ่านไม่ได้</summary>
+                  <p className="break-all">
+                    {entry.fileName} · {entry.problem} · กฎที่ใช้แฟ้มนี้ตรวจไม่ได้
+                  </p>
+                </details>
+              </li>
+            );
           const file = entry.report;
           const status =
             file.status === 'checked' ? (file.rows.length ? 'มีข้อมูล' : 'มีเฉพาะหัวตาราง') : 'อ่านไม่ได้';
@@ -225,16 +236,25 @@ export function App() {
       setSelection({ status: 'idle' });
       return;
     }
-    if (files.some((file) => !file.name.toLowerCase().endsWith('.txt'))) {
-      setSelection({ status: 'error', message: 'โปรดเลือกเฉพาะไฟล์ TXT จากชุดส่งออกเดียวกัน' });
+    const singleZip = files.length === 1 && /\.zip$/i.test(files[0].name);
+    if (!singleZip && files.some((file) => !file.name.toLowerCase().endsWith('.txt'))) {
+      setSelection({
+        status: 'error',
+        message: 'IO-01 · โปรดเลือก ZIP หนึ่งไฟล์ หรือ TXT จากชุดส่งออกเดียวกัน',
+      });
       return;
     }
     setSelection({ status: 'reading' });
     try {
-      const report = await inspectSelection(files);
+      const report = singleZip ? await inspectZip(files[0]) : await inspectFiles(files);
       setSelection({ status: 'done', report });
     } catch {
-      setSelection({ status: 'error', message: 'เปิดไฟล์ในเครื่องไม่ได้ โปรดเลือกไฟล์อีกครั้ง' });
+      setSelection({
+        status: 'error',
+        message: singleZip
+          ? 'IO-15 · อ่านรายการใน ZIP ไม่ครบ จึงหยุดรอบตรวจ โปรดเลือก ZIP อีกครั้ง'
+          : 'เปิดไฟล์ในเครื่องไม่ได้ โปรดเลือกไฟล์อีกครั้ง',
+      });
     }
   }
 
@@ -243,17 +263,17 @@ export function App() {
       <header className="mb-7 border-l-4 border-teal-700 pl-4">
         <h1 className="text-3xl font-bold">ตรวจโครงสร้าง 43 แฟ้ม</h1>
         <p className="mt-2 text-slate-700">
-          เลือก TXT หนึ่งหรือหลายไฟล์จากชุดส่งออกเดียวกัน ข้อมูลและผลตรวจอยู่บนอุปกรณ์นี้
+          เลือก ZIP หนึ่งไฟล์ หรือ TXT หนึ่งหรือหลายไฟล์จากชุดส่งออกเดียวกัน ข้อมูลและผลตรวจอยู่บนอุปกรณ์นี้
         </p>
       </header>
       <section className="rounded-xl border border-slate-200 bg-white p-5 sm:p-7">
         <label htmlFor="txt-files" className="block text-lg font-semibold">
-          เลือกไฟล์ TXT
+          เลือกไฟล์ TXT หรือ ZIP
         </label>
         <input
           id="txt-files"
           type="file"
-          accept=".txt"
+          accept=".txt,.zip"
           multiple
           onChange={selectFile}
           disabled={selection.status === 'reading'}
