@@ -10,9 +10,25 @@ import {
 import { inspectTxt } from './inspectTxt';
 import { fileReferences } from './structureReference';
 
-type TxtInput = Pick<File, 'name' | 'arrayBuffer'>;
+type EntryDetail = { name: string; problem?: string };
+type TxtInput = Pick<File, 'name' | 'arrayBuffer'> & { verifyIntegrity?: () => Promise<void> };
 
 type Input = TxtInput | { name: string; problem: string };
+
+export class SelectionError extends Error {}
+const invalidDirectory = 'IO-15 · อ่านรายการใน ZIP ไม่ครบ จึงหยุดรอบตรวจ โปรดเลือก ZIP อีกครั้ง';
+const invalidEntry = 'IO-15 · อ่านหรือตรวจความสมบูรณ์ของข้อมูลใน ZIP ไม่สำเร็จ';
+
+// For duplicates and supplements, verify the transport without decoding or retaining TXT rows.
+async function inspectEntryOnly(file: Input): Promise<EntryDetail> {
+  if ('problem' in file) return file;
+  try {
+    await file.verifyIntegrity?.();
+    return { name: file.name };
+  } catch {
+    return { name: file.name, problem: invalidEntry };
+  }
+}
 
 function zipEntryProblem(entry: Entry) {
   const path = entry.filename.replaceAll('\\', '/').replace(/\/$/, '');
@@ -23,22 +39,20 @@ function zipEntryProblem(entry: Entry) {
   )
     return 'IO-14 · เส้นทางไม่ปลอดภัย';
   if (entry.symlink) return 'IO-14 · ไม่ตาม symlink';
-  if (/\.zip$/i.test(path)) return 'IO-14 · ไม่เปิด ZIP ซ้อน';
+  if (!entry.directory && /\.zip$/i.test(path)) return 'IO-14 · ไม่เปิด ZIP ซ้อน';
   if (entry.encrypted) return 'IO-15 · รายการเข้ารหัส';
   if (entry.compressionMethod !== 0 && entry.compressionMethod !== 8)
     return 'IO-15 · ไม่รองรับวิธีบีบอัดของรายการนี้';
 }
 
-export async function inspectFiles(files: Input[], fromZip = false) {
-  const outside: string[] = [];
+async function inspectFiles(files: Input[]) {
+  const outside: EntryDetail[] = [];
   const byName = new Map<string, Input[]>();
   for (const file of files) {
     const basename = file.name.split(/[\\/]/).pop() ?? file.name;
     const name = basename.slice(0, -4).toUpperCase();
     if (!/\.txt$/i.test(basename) || !fileReferences.some((reference) => reference.name === name)) {
-      outside.push(
-        'problem' in file ? file.name + ' · ' + file.problem + ' · ตรวจไม่ได้' : file.name,
-      );
+      outside.push(await inspectEntryOnly(file));
       continue;
     }
     const group = byName.get(name) ?? [];
@@ -52,18 +66,24 @@ export async function inspectFiles(files: Input[], fromZip = false) {
     if (!group) {
       coverage.push({ name: reference.name, status: 'absent' as const });
     } else if (group.length > 1) {
-      coverage.push({ name: reference.name, status: 'duplicate' as const, count: group.length });
+      const members = [];
+      for (const member of group) members.push(await inspectEntryOnly(member));
+      coverage.push({ name: reference.name, status: 'duplicate' as const, members });
     } else if ('problem' in group[0]) {
       const { name: fileName, problem } = group[0];
       coverage.push({ name: reference.name, status: 'unavailable' as const, fileName, problem });
     } else {
       const report = await inspectTxt(group[0], reference);
-      if (fromZip && report.status === 'unreadable' && report.reason === 'read-failed') {
+      if (
+        group[0].verifyIntegrity &&
+        report.status === 'unreadable' &&
+        report.reason === 'read-failed'
+      ) {
         coverage.push({
           name: reference.name,
           status: 'unavailable' as const,
           fileName: report.fileName,
-          problem: 'IO-15 · อ่านหรือตรวจความสมบูรณ์ของข้อมูลใน ZIP ไม่สำเร็จ',
+          problem: invalidEntry,
         });
       } else {
         coverage.push({ name: reference.name, status: 'submitted' as const, report });
@@ -72,11 +92,18 @@ export async function inspectFiles(files: Input[], fromZip = false) {
   }
   return { coverage, outside, submitted: byName.size };
 }
-export async function inspectZip(file: File) {
-  const reader = new ZipReader(new BlobReader(file), { useWebWorkers: false });
+
+async function inspectZip(file: File) {
+  const reader = new ZipReader(new BlobReader(file), {
+    useWebWorkers: false,
+    checkSignature: true,
+    checkLocalFilename: true,
+  });
   try {
     // Keep the original names so an unsafe entry can be reported without opening it.
-    const entries = await reader.getEntries({ filenameValidation: 'tolerant' });
+    const entries = await reader.getEntries({ filenameValidation: 'tolerant' }).catch(() => {
+      throw new SelectionError(invalidDirectory);
+    });
     if (
       reader.warnings?.some(({ reason }) =>
         [
@@ -86,7 +113,7 @@ export async function inspectZip(file: File) {
         ].includes(reason),
       )
     )
-      throw new Error('Incomplete ZIP directory');
+      throw new SelectionError(invalidDirectory);
     const inputs: Input[] = [];
     for (const entry of entries) {
       const problem = zipEntryProblem(entry);
@@ -95,18 +122,25 @@ export async function inspectZip(file: File) {
         inputs.push({
           name: entry.filename,
           async arrayBuffer() {
-            const blob = await entry.getData(new BlobWriter(), {
-              checkSignature: true,
-              checkLocalFilename: true,
-            });
+            const blob = await entry.getData(new BlobWriter());
             return blob.arrayBuffer();
+          },
+          async verifyIntegrity() {
+            await entry.getData(new WritableStream<Uint8Array>());
           },
         });
     }
-    return await inspectFiles(inputs, true);
+    return await inspectFiles(inputs);
   } finally {
     await reader.close();
   }
+}
+
+export function inspectSelection(files: File[]) {
+  if (files.length === 1 && /\.zip$/i.test(files[0].name)) return inspectZip(files[0]);
+  if (files.some((file) => !/\.txt$/i.test(file.name)))
+    throw new SelectionError('IO-01 · โปรดเลือก ZIP หนึ่งไฟล์ หรือ TXT จากชุดส่งออกเดียวกัน');
+  return inspectFiles(files);
 }
 
 export type SelectionReport = Awaited<ReturnType<typeof inspectFiles>>;

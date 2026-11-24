@@ -14,7 +14,8 @@ def add(archive, name, data, method=ZIP_STORED):
 
 with ZipFile(fixtures / "readable.zip", "w") as archive:
     add(archive, "PERSON.TXT", "PID|HOSPCODE9\nTEST-PERSON|")
-    add(archive, "export/hOmE.tXt", "HID\nTEST-HOME", ZIP_DEFLATED)
+    add(archive, "export.zip/", "")
+    add(archive, "export.zip/hOmE.tXt", "HID\nTEST-HOME", ZIP_DEFLATED)
     add(archive, "POLICY.txt", "supplement")
 
 # Change one stored payload byte after writing. The original CRC stays in both headers.
@@ -24,6 +25,8 @@ with ZipFile(partial, "w") as archive:
     add(archive, "HOME.txt", "HID\nTEST-HOME", ZIP_DEFLATED)
     add(archive, "export/ICF.txt", "DATE_SERRV")
     add(archive, "ICF.TXT", "DATE_SERRV")
+    add(archive, "second/icf.txt", "VALID-CRC")
+    add(archive, "supplement/POLICY.txt", "VALID-CRC")
 partial.write_bytes(partial.read_bytes().replace(b"VALID-CRC", b"WRONG-CRC"))
 
 with ZipFile(fixtures / "restricted.zip", "w") as archive:

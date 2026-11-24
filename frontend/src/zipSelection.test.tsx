@@ -1,13 +1,24 @@
 import '@testing-library/jest-dom/vitest';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import App from './App';
 
-afterEach(cleanup);
+beforeEach(() => vi.stubGlobal('fetch', vi.fn()));
+afterEach(() => {
+  const fetch = globalThis.fetch;
+  cleanup();
+  vi.unstubAllGlobals();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+function archiveBytes(name: string) {
+  return readFileSync(resolve(import.meta.dirname, '../qa/fixtures/zip', name + '.zip'));
+}
 
 function archive(name: string) {
-  const bytes = readFileSync(`qa/fixtures/zip/${name}.zip`);
+  const bytes = archiveBytes(name);
   return new File([Uint8Array.from(bytes)], name + '.ZIP');
 }
 
@@ -24,6 +35,7 @@ it('IO-12/16 checks stored and deflated TXT by basename and reports supplementar
   expect(coverage).toHaveTextContent('HOME · มีข้อมูล');
   expect(coverage).toHaveTextContent(/บรรทัด 2.*PER-REQUIRED/);
   expect(screen.getByText('POLICY.txt')).toBeVisible();
+  expect(screen.queryByText(/ZIP ซ้อน/)).not.toBeInTheDocument();
   expect(document.body).not.toHaveTextContent('TEST-PERSON');
 });
 
@@ -33,7 +45,10 @@ it('IO-13/15 isolates a bad CRC and identical duplicate basenames from a readabl
   const coverage = await screen.findByRole('list', { name: 'สถานะการส่ง 43 แฟ้มหลัก' });
   expect(coverage).toHaveTextContent(/PERSON.*อ่านไม่ได้.*IO-15.*ความสมบูรณ์/);
   expect(coverage).toHaveTextContent('HOME · มีข้อมูล');
-  expect(coverage).toHaveTextContent('ICF · ชื่อแฟ้มซ้ำ 2 ไฟล์');
+  const duplicates = screen.getByText(/ICF · ชื่อแฟ้มซ้ำ 3 ไฟล์/).closest('li');
+  expect(duplicates).toHaveTextContent('export/ICF.txt');
+  expect(duplicates).toHaveTextContent(/second\/icf.txt.*IO-15.*ความสมบูรณ์/);
+  expect(screen.getByText(/supplement\/POLICY.txt.*IO-15.*ความสมบูรณ์/)).toBeVisible();
   expect(coverage).not.toHaveTextContent('บรรทัด 2 · ข้อผิดพลาดตามมาตรฐาน PER-REQUIRED');
 });
 
@@ -62,11 +77,12 @@ it.each(['truncated', 'incomplete listing'])(
     render(<App />);
     select(archive('readable'));
     await screen.findByText(/แฟ้มหลักที่ส่ง 2 จาก 43/);
-    const bytes = readFileSync('qa/fixtures/zip/readable.zip');
+    const bytes = archiveBytes('readable');
     const end = bytes.lastIndexOf(Buffer.from('PK\x05\x06', 'binary'));
-    // The real directory holds three records. Declare only the first two.
-    bytes.writeUInt16LE(2, end + 8);
-    bytes.writeUInt16LE(2, end + 10);
+    // Leave the last real directory record outside the declared count.
+    const incompleteCount = bytes.readUInt16LE(end + 10) - 1;
+    bytes.writeUInt16LE(incompleteCount, end + 8);
+    bytes.writeUInt16LE(incompleteCount, end + 10);
     const damaged = fault === 'truncated' ? bytes.subarray(0, end) : bytes;
     select(new File([Uint8Array.from(damaged)], 'broken.zip'));
     expect(await screen.findByText(/IO-15.*อ่านรายการใน ZIP.*หยุดรอบ/)).toBeVisible();

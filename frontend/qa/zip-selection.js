@@ -4,8 +4,11 @@ async function verifyZipSelection(page) {
   await page.reload({ waitUntil: 'networkidle' });
   const input = page.getByLabel('เลือกไฟล์ TXT หรือ ZIP');
   let requests = 0;
-  const countRequest = () => requests++;
-  page.on('request', countRequest);
+  const blockRequest = (route) => {
+    requests++;
+    return route.abort();
+  };
+  await page.route('**/*', blockRequest);
   try {
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 850 });
@@ -17,7 +20,7 @@ async function verifyZipSelection(page) {
 
       await input.setInputFiles('frontend/qa/fixtures/zip/partial.zip');
       await page.getByText(/แฟ้มหลักที่ส่ง 3 จาก 43/).waitFor();
-      await page.getByText(/ICF · ชื่อแฟ้มซ้ำ 2 ไฟล์/).waitFor();
+      await page.getByText(/ICF · ชื่อแฟ้มซ้ำ 3 ไฟล์/).waitFor();
       await page.locator('summary', { hasText: 'PERSON · อ่านไม่ได้' }).click();
       await page.getByText(/PERSON.TXT.*IO-15.*ความสมบูรณ์/).waitFor();
       await page.locator('summary', { hasText: 'HOME · มีข้อมูล' }).click();
@@ -29,7 +32,7 @@ async function verifyZipSelection(page) {
     }
     if (requests) throw new Error('ZIP selection triggered a network request');
   } finally {
-    page.off('request', countRequest);
+    await page.unroute('**/*', blockRequest);
   }
   return 'Verified readable and partial ZIP reports at 1280px and 390px, zero selection requests';
 }

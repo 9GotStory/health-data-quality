@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from 'react';
 import type { inspectTxt } from './inspectTxt';
-import { inspectFiles, inspectZip, type SelectionReport } from './inspectSelection';
+import { inspectSelection, SelectionError, type SelectionReport } from './inspectSelection';
 import { structureRegistry } from './structureReference';
 
 type Report = Awaited<ReturnType<typeof inspectTxt>>;
@@ -155,6 +155,19 @@ function FileDetails({ report }: { report: Report }) {
   );
 }
 
+function EntryList({ entries }: { entries: SelectionReport['outside'] }) {
+  return (
+    <ul>
+      {entries.map(({ name, problem }, index) => (
+        <li key={index} className="break-all">
+          {name}
+          {problem && ` · ${problem} · ตรวจไม่ได้`}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CoverageResult({ report }: { report: SelectionReport }) {
   return (
     <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 sm:p-7">
@@ -166,13 +179,7 @@ function CoverageResult({ report }: { report: SelectionReport }) {
       {report.outside.length > 0 && (
         <section className="my-4">
           <h3 className="font-semibold">นอกขอบเขต 43 แฟ้มหลัก</h3>
-          <ul>
-            {report.outside.map((name, index) => (
-              <li key={index} className="break-all">
-                {name}
-              </li>
-            ))}
-          </ul>
+          <EntryList entries={report.outside} />
         </section>
       )}
       <ul aria-label="สถานะการส่ง 43 แฟ้มหลัก" className="mt-4 divide-y divide-slate-200">
@@ -186,8 +193,9 @@ function CoverageResult({ report }: { report: SelectionReport }) {
           if (entry.status === 'duplicate')
             return (
               <li key={entry.name} className="py-2 text-amber-900">
-                {entry.name} · ชื่อแฟ้มซ้ำ {entry.count} ไฟล์ · IO-13 · ตรวจไม่ได้
-                โปรดเลือกแฟ้มชื่อนี้เพียงไฟล์เดียว
+                {entry.name} · ชื่อแฟ้มซ้ำ {entry.members.length} ไฟล์ · IO-13 · ตรวจไม่ได้
+                โปรดให้ชุดที่เลือกมีแฟ้มชื่อนี้เพียงไฟล์เดียว
+                <EntryList entries={entry.members} />
               </li>
             );
           if (entry.status === 'unavailable')
@@ -236,24 +244,16 @@ export function App() {
       setSelection({ status: 'idle' });
       return;
     }
-    const singleZip = files.length === 1 && /\.zip$/i.test(files[0].name);
-    if (!singleZip && files.some((file) => !file.name.toLowerCase().endsWith('.txt'))) {
-      setSelection({
-        status: 'error',
-        message: 'IO-01 · โปรดเลือก ZIP หนึ่งไฟล์ หรือ TXT จากชุดส่งออกเดียวกัน',
-      });
-      return;
-    }
-    setSelection({ status: 'reading' });
     try {
-      const report = singleZip ? await inspectZip(files[0]) : await inspectFiles(files);
+      const pending = inspectSelection(files);
+      setSelection({ status: 'reading' });
+      const report = await pending;
       setSelection({ status: 'done', report });
-    } catch {
+    } catch (error) {
       setSelection({
         status: 'error',
-        message: singleZip
-          ? 'IO-15 · อ่านรายการใน ZIP ไม่ครบ จึงหยุดรอบตรวจ โปรดเลือก ZIP อีกครั้ง'
-          : 'เปิดไฟล์ในเครื่องไม่ได้ โปรดเลือกไฟล์อีกครั้ง',
+        message:
+          error instanceof SelectionError ? error.message : 'เปิดไฟล์ในเครื่องไม่ได้ โปรดเลือกไฟล์อีกครั้ง',
       });
     }
   }
