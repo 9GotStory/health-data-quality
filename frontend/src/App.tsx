@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent } from 'react';
-import { inspectPersonHeader, personReference } from './personHeader';
+import { inspectPersonTxt, personReference } from './personHeader';
 
-type Report = Awaited<ReturnType<typeof inspectPersonHeader>>;
+type Report = Awaited<ReturnType<typeof inspectPersonTxt>>;
 type Selection =
   | { status: 'idle' | 'reading' }
   | { status: 'error'; message: string }
@@ -45,9 +45,9 @@ function RowResult({ row, expectedWidth }: { row: DataRow; expectedWidth: number
   return (
     <li>
       <p>บรรทัด {row.line} · อ่านได้</p>
-      {row.emptyHospcode9 && (
+      {row.hospcode9 === 'empty' && (
         <p className="text-red-800">
-          บรรทัด {row.line} · ข้อผิดพลาดตามมาตรฐาน PER-NN · HOSPCODE9 ต้องมีค่า
+          บรรทัด {row.line} · ข้อผิดพลาดตามมาตรฐาน PER-REQUIRED · HOSPCODE9 ต้องมีค่า
         </p>
       )}
       {row.whitespace.map(({ column, field }) => (
@@ -79,6 +79,9 @@ function TxtResult({ report }: { report: Report }) {
     <>
       <h3 className="font-semibold">โครงสร้างตามมาตรฐาน · หัวตารางบรรทัด 1</h3>
       <HeaderResult report={report} />
+      {report.missing.includes('HOSPCODE9') && (
+        <p>PER-REQUIRED · ตรวจไม่ได้ทุกแถว เพราะขาดคอลัมน์ HOSPCODE9</p>
+      )}
       <h3 className="mt-5 font-semibold">ผลการอ่าน TXT ตามนโยบายเครื่องมือ Q20</h3>
       <p>อ่านไฟล์ด้วย UTF-8 ได้ · หัวตารางมี {report.expectedWidth} ช่อง</p>
       {report.reordered && (
@@ -90,6 +93,7 @@ function TxtResult({ report }: { report: Report }) {
       {report.duplicates.map(({ field, columns }) => (
         <p key={columns[0]}>
           IO-11 · บรรทัด 1 ชื่อคอลัมน์ซ้ำ {field} ที่ตำแหน่ง {columns.join(', ')} กฎที่ใช้ชื่อนี้ตรวจไม่ได้
+          {field === 'HOSPCODE9' && ' รวมถึง PER-REQUIRED'}
         </p>
       ))}
       {report.rows.length === 0 ? (
@@ -126,7 +130,7 @@ export function App() {
     }
     setSelection({ status: 'reading' });
     try {
-      const report = await inspectPersonHeader(file, personReference);
+      const report = await inspectPersonTxt(file, personReference);
       setSelection({ status: 'done', report });
     } catch {
       setSelection({ status: 'error', message: 'เปิดไฟล์ในเครื่องไม่ได้ โปรดเลือกไฟล์อีกครั้ง' });
@@ -165,6 +169,9 @@ export function App() {
             <dl className="mt-5 grid gap-x-4 gap-y-1 border-t border-slate-200 pt-4 text-sm sm:grid-cols-[auto_1fr]">
               <dt className="font-semibold">กฎที่ใช้</dt>
               <dd>PER-STRUCT · ตรวจชื่อคอลัมน์ PERSON ตามทะเบียน โดยเทียบตัวพิมพ์ตรงกัน</dd>
+              <dd className="sm:col-start-2">
+                PER-REQUIRED · ตรวจค่าว่างของ HOSPCODE9 เมื่ออ่านแถวและระบุคอลัมน์ได้
+              </dd>
               <dt className="font-semibold">รุ่นชุดอ้างอิง</dt>
               <dd>{selection.report.reference.version}</dd>
               <dt className="font-semibold">แหล่งอ้างอิง</dt>

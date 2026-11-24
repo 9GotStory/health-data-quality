@@ -3,6 +3,11 @@
 async function verifyPersonHeader(page) {
   await page.reload({ waitUntil: 'networkidle' });
   const input = page.getByLabel('เลือกไฟล์ PERSON.TXT');
+  async function verifyViewport() {
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) {
+      throw new Error('Report overflows the viewport');
+    }
+  }
   let requestCount = 0;
   const countRequest = () => requestCount++;
   page.on('request', countRequest);
@@ -23,9 +28,7 @@ async function verifyPersonHeader(page) {
         if (fixture === 'missing') await page.getByText('HOSPCODE9', { exact: true }).waitFor();
         await page.getByText('PERSON-header-1', { exact: true }).waitFor();
         await page.getByText(/ยังไม่พร้อมตรวจความหมาย/).waitFor();
-        if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) {
-          throw new Error('Report overflows the viewport');
-        }
+        await verifyViewport();
       }
       const cases = [
         {
@@ -35,7 +38,7 @@ async function verifyPersonHeader(page) {
           results: [
             'แถวข้อมูล 4 แถว · อ่านได้ 2 · อ่านไม่ได้ 2',
             /IO-11.*PID.*ตรวจไม่ได้/,
-            /บรรทัด 2.*PER-NN.*HOSPCODE9/,
+            /บรรทัด 2.*PER-REQUIRED.*HOSPCODE9/,
             /บรรทัด 3.*บรรทัดว่าง.*ตรวจไม่ได้/,
             /บรรทัด 4.*4 ช่อง.*3 ช่อง/,
             /บรรทัด 5.*IO-09.*HOSPCODE9/,
@@ -51,9 +54,7 @@ async function verifyPersonHeader(page) {
         await input.setInputFiles({ name: 'PERSON.TXT', mimeType: 'text/plain', buffer });
         for (const expected of results) await page.getByText(expected, { exact: true }).waitFor();
         if (await page.getByText(/private|001/).count()) throw new Error('Raw data in report');
-        if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) {
-          throw new Error('TXT report overflows the viewport');
-        }
+        await verifyViewport();
       }
     }
     if (requestCount) throw new Error('Selecting a local file triggered a network request');

@@ -2,11 +2,11 @@
 import { expect, it } from 'vitest';
 import complete from '../qa/fixtures/complete/PERSON.TXT?raw';
 import missing from '../qa/fixtures/missing/PERSON.TXT?raw';
-import { inspectPersonHeader, personReference } from './personHeader';
+import { inspectPersonTxt, personReference } from './personHeader';
 
 it('finds all 34 referenced names without including record values in the report', async () => {
   const file = new File([complete], 'PERSON.TXT');
-  const result = await inspectPersonHeader(file, personReference);
+  const result = await inspectPersonTxt(file, personReference);
   expect(result).toMatchObject({
     fileName: 'PERSON.TXT',
     reference: { version: 'PERSON-header-1', columns: { length: 34 } },
@@ -18,28 +18,32 @@ it('finds all 34 referenced names without including record values in the report'
 
 it('reports the exact missing name on a header-only file even when its lowercase spelling exists', async () => {
   const file = new File([missing.trimEnd() + '|hospcode9'], 'person.txt');
-  expect(await inspectPersonHeader(file, personReference)).toMatchObject({
+  expect(await inspectPersonTxt(file, personReference)).toMatchObject({
     status: 'checked',
     missing: ['HOSPCODE9'],
   });
 });
 
 it('reports no readable header for a zero-byte file', async () => {
-  expect(await inspectPersonHeader(new File([], 'PERSON.TXT'), personReference)).toMatchObject({
+  expect(await inspectPersonTxt(new File([], 'PERSON.TXT'), personReference)).toMatchObject({
     status: 'no-header',
   });
 });
 
 function inspect(...parts: BlobPart[]) {
-  return inspectPersonHeader(new File(parts, 'PERSON.TXT'), personReference);
+  return inspectPersonTxt(new File(parts, 'PERSON.TXT'), personReference);
 }
 
 it.each([
-  ['IT-06 invalid byte after a readable prefix', new Uint8Array([0xff]), 'invalid-utf8'],
+  [
+    'IT-06 invalid byte after a readable prefix',
+    new Uint8Array([0x50, 0x49, 0x44, 0x0a, 0x31, 0xff]),
+    'invalid-utf8',
+  ],
   ['IT-07 UTF-16 signature', new Uint8Array([0xff, 0xfe, 0x41, 0]), 'invalid-utf8'],
-  ['IT-09 bare CR', '\rX', 'bare-cr'],
-])('%s makes the entire file unavailable', async (_, suffix, reason) => {
-  const result = await inspect('PID\n00042\n', suffix);
+  ['IT-09 bare CR', 'PID\n1\rX', 'bare-cr'],
+])('%s makes the entire file unavailable', async (_, contents, reason) => {
+  const result = await inspect(contents);
   expect(result).toMatchObject({ status: 'unreadable', reason });
   expect(result).not.toHaveProperty('missing');
   expect(result).not.toHaveProperty('rows');
@@ -82,16 +86,16 @@ it('IT-16/20/21 applies the empty-field rule only to an unambiguous HOSPCODE9 on
   );
   expect(result).toMatchObject({
     rows: [
-      { emptyHospcode9: true, whitespace: [] },
-      { emptyHospcode9: false, whitespace: [{ column: 3, field: 'HOSPCODE9' }] },
-      ...Array(6).fill({ emptyHospcode9: false, whitespace: [] }),
+      { hospcode9: 'empty', whitespace: [] },
+      { hospcode9: 'whitespace', whitespace: [{ column: 3, field: 'HOSPCODE9' }] },
+      ...Array(6).fill({ hospcode9: 'present', whitespace: [] }),
     ],
   });
   expect(await inspect('HOSPCODE9|PID|HOSPCODE9\n|\t|a')).toMatchObject({
-    rows: [{ emptyHospcode9: false, whitespace: [{ column: 2, field: 'PID' }] }],
+    rows: [{ hospcode9: 'unavailable', whitespace: [{ column: 2, field: 'PID' }] }],
   });
-  expect(await inspect('PID|HOSPCODE9\n001|')).toMatchObject({ rows: [{ emptyHospcode9: true }] });
-  expect(await inspect('HOSPCODE9|PID\n|001')).toMatchObject({ rows: [{ emptyHospcode9: true }] });
+  expect(await inspect('PID|HOSPCODE9\n001|')).toMatchObject({ rows: [{ hospcode9: 'empty' }] });
+  expect(await inspect('HOSPCODE9|PID\n|001')).toMatchObject({ rows: [{ hospcode9: 'empty' }] });
 });
 
 it.each([
@@ -132,10 +136,23 @@ it('IT-15–17 checks a real 34-field layout and withholds dependent results on 
   expect(result).toMatchObject({
     expectedWidth: 34,
     rows: [
-      { line: 2, status: 'readable', emptyHospcode9: true },
+      { line: 2, status: 'readable', hospcode9: 'empty' },
       { line: 3, status: 'wrong-width', actual: 35 },
     ],
   });
   if (result.status !== 'checked') throw new Error('Expected a readable header');
-  expect(result.rows[1]).not.toHaveProperty('emptyHospcode9');
+  expect(result.rows[1]).not.toHaveProperty('hospcode9');
+});
+
+it('IT-22 reads all 34 reordered fields by exact name', async () => {
+  const header = complete.split(/\r?\n/, 1)[0].split('|');
+  const reordered = ['HOSPCODE9', ...header.slice(0, -1)].join('|');
+  const values = ['', ...Array(33).fill('1')].join('|');
+  expect(await inspect(reordered + '\n' + values)).toMatchObject({
+    missing: [],
+    duplicates: [],
+    extraColumns: [],
+    reordered: true,
+    rows: [{ status: 'readable', hospcode9: 'empty' }],
+  });
 });

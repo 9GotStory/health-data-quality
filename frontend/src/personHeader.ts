@@ -81,7 +81,16 @@ function inspectColumns(names: string[], reference: PersonReference) {
   };
 }
 
-export async function inspectPersonHeader(file: File, reference: PersonReference) {
+const whitespaceOnly = /^\p{White_Space}+$/u;
+
+function requiredValueStatus(value: string | undefined) {
+  if (value === undefined) return 'unavailable';
+  if (value === '') return 'empty';
+  if (whitespaceOnly.test(value)) return 'whitespace';
+  return 'present';
+}
+
+export async function inspectPersonTxt(file: File, reference: PersonReference) {
   const bytes = await file.arrayBuffer();
   const base = { fileName: file.name, reference };
   let text: string;
@@ -107,13 +116,13 @@ export async function inspectPersonHeader(file: File, reference: PersonReference
       return { line, status: 'wrong-width' as const, actual: fields.length };
     }
     const whitespace = fields.flatMap((value, index) =>
-      /^\p{White_Space}+$/u.test(value) ? [{ column: index + 1, field: bindings[index] }] : [],
+      whitespaceOnly.test(value) ? [{ column: index + 1, field: bindings[index] }] : [],
     );
     return {
       line,
       status: 'readable' as const,
       whitespace,
-      emptyHospcode9: fields[hospcode9Index] === '',
+      hospcode9: requiredValueStatus(fields[hospcode9Index]),
     };
   });
   return {
