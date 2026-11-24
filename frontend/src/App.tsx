@@ -1,97 +1,103 @@
-import { useState, type FormEvent } from 'react';
-import { useCreateItem, useItems } from './hooks/useItems';
+import { useState, type ChangeEvent } from 'react';
+import { inspectPersonHeader, personReference } from './personHeader';
+
+type Report = Awaited<ReturnType<typeof inspectPersonHeader>>;
+type Selection =
+  | { status: 'idle' | 'reading' }
+  | { status: 'error'; message: string }
+  | { status: 'done'; report: Report };
+
+function HeaderResult({ report }: { report: Report }) {
+  if (report.status === 'no-header') {
+    return <p>ตรวจชื่อคอลัมน์ไม่ได้ เพราะไม่มีหัวตารางในบรรทัดแรก</p>;
+  }
+  if (!report.missing.length) {
+    return <p>พบชื่อคอลัมน์อ้างอิงครบ {report.reference.columns.length} ชื่อในบรรทัดแรก</p>;
+  }
+  return (
+    <>
+      <p className="font-semibold text-red-800">
+        ข้อผิดพลาดในบรรทัดแรก · ขาด {report.missing.length} คอลัมน์
+      </p>
+      <ul aria-label="ชื่อคอลัมน์ที่ขาด" className="mt-3 flex flex-wrap gap-2">
+        {report.missing.map((name) => (
+          <li key={name} className="rounded bg-red-50 px-2 py-1 font-mono text-sm text-red-900">
+            {name}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
 
 export function App() {
-  const { data: items, isLoading, isError, error } = useItems();
-  const createItemMutation = useCreateItem();
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
+  const [selection, setSelection] = useState<Selection>({ status: 'idle' });
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!code.trim() || !name.trim()) return;
-
-    createItemMutation.mutate(
-      { code: code.trim(), name: name.trim() },
-      {
-        onSuccess: () => {
-          setCode('');
-          setName('');
-        },
-      },
-    );
-  };
+  async function selectFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) {
+      setSelection({ status: 'idle' });
+      return;
+    }
+    if (file.name.toUpperCase() !== 'PERSON.TXT') {
+      setSelection({ status: 'error', message: 'รอบตรวจนี้รองรับเฉพาะไฟล์ชื่อ PERSON.TXT' });
+      return;
+    }
+    setSelection({ status: 'reading' });
+    try {
+      const report = await inspectPersonHeader(file, personReference);
+      setSelection({ status: 'done', report });
+    } catch {
+      setSelection({ status: 'error', message: 'อ่านไฟล์ไม่ได้ โปรดตรวจว่าไฟล์เปิดได้และใช้ UTF-8' });
+    }
+  }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          React + GAS Starter Template
-        </h1>
-        <p className="mt-1 text-sm text-slate-600">
-          TanStack Query + Google Apps Script Web App API + Google Sheets
-        </p>
+    <main className="mx-auto max-w-3xl px-5 py-10 sm:py-16">
+      <header className="mb-7 border-l-4 border-teal-700 pl-4">
+        <h1 className="text-3xl font-bold">ตรวจโครงสร้างแฟ้ม PERSON</h1>
+        <p className="mt-2 text-slate-700">ตรวจชื่อคอลัมน์ในเครื่อง ข้อมูลและผลตรวจอยู่บนอุปกรณ์นี้</p>
       </header>
-
-      <section className="mb-8 rounded-lg border border-slate-200 bg-white p-5 shadow-xs">
-        <h2 className="mb-3 text-base font-semibold text-slate-800">Add Item</h2>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
-          <input
-            type="text"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Code (e.g. 00123)"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-          />
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Item name"
-            className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={createItemMutation.isPending}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-          >
-            {createItemMutation.isPending ? 'Saving...' : 'Save'}
-          </button>
-        </form>
-        {createItemMutation.isError && (
-          <p className="mt-2 text-sm text-red-600">{createItemMutation.error.message}</p>
-        )}
+      <section className="rounded-xl border border-slate-200 bg-white p-5 sm:p-7">
+        <label htmlFor="person-file" className="block text-lg font-semibold">
+          เลือกไฟล์ PERSON.TXT
+        </label>
+        <input
+          id="person-file"
+          type="file"
+          accept=".txt"
+          onChange={selectFile}
+          disabled={selection.status === 'reading'}
+          className="mt-3 w-full rounded border border-slate-300 p-2 text-sm file:mr-3 file:cursor-pointer file:rounded file:bg-teal-800 file:px-4 file:py-2 file:font-semibold file:text-white focus-visible:outline-2 focus-visible:outline-teal-700"
+        />
       </section>
-
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs">
-        <h2 className="mb-3 text-base font-semibold text-slate-800">Items</h2>
-
-        {isLoading && <p className="text-sm text-slate-500">Loading items...</p>}
-
-        {isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-            Failed to load items: {error.message}
-          </div>
+      <div aria-live="polite" aria-atomic="true">
+        {selection.status === 'reading' && <p className="mt-5">กำลังอ่านไฟล์ในเครื่อง…</p>}
+        {selection.status === 'error' && <p className="mt-5 text-red-800">{selection.message}</p>}
+        {selection.status === 'done' && (
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 sm:p-7">
+            <h2 className="mb-3 text-xl font-semibold">ผลตรวจ {selection.report.fileName}</h2>
+            <HeaderResult report={selection.report} />
+            <p className="mt-4 text-slate-700">ยังไม่พร้อมตรวจความหมายของข้อมูลรายแถว</p>
+            <dl className="mt-5 grid gap-x-4 gap-y-1 border-t border-slate-200 pt-4 text-sm sm:grid-cols-[auto_1fr]">
+              <dt className="font-semibold">กฎที่ใช้</dt>
+              <dd>PER-STRUCT · ตรวจชื่อคอลัมน์ PERSON ตามทะเบียน โดยเทียบตัวพิมพ์ตรงกัน</dd>
+              <dt className="font-semibold">รุ่นชุดอ้างอิง</dt>
+              <dd>{selection.report.reference.version}</dd>
+              <dt className="font-semibold">แหล่งอ้างอิง</dt>
+              <dd>
+                <a
+                  href={selection.report.reference.url}
+                  rel="noreferrer"
+                  className="text-teal-800 underline"
+                >
+                  {selection.report.reference.source}
+                </a>
+              </dd>
+            </dl>
+          </section>
         )}
-
-        {!isLoading && !isError && (!items || items.length === 0) && (
-          <p className="text-sm text-slate-500">No items found.</p>
-        )}
-
-        {!isLoading && !isError && items && items.length > 0 && (
-          <ul className="divide-y divide-slate-200">
-            {items.map((item) => (
-              <li key={item.id} className="flex items-center justify-between py-2.5 text-sm">
-                <div>
-                  <span className="font-mono text-xs text-slate-500">{item.code}</span>
-                  <span className="ml-3 font-medium text-slate-800">{item.name}</span>
-                </div>
-                <span className="text-xs text-slate-400">{item.createdAt}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      </div>
     </main>
   );
 }
