@@ -22,3 +22,15 @@ it('selects a local PERSON file and reports missing names without contacting the
   expect(screen.queryByText(/00042/)).not.toBeInTheDocument();
   expect(fetch).not.toHaveBeenCalled();
 });
+
+it('shows the physical line, cause and scope of each limitation alongside independent results', async () => {
+  render(<App />);
+  const file = new File(['PID|PID|HOSPCODE9\n01|02|\r\n\n01|02\n01|02| '], 'PERSON.TXT');
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ PERSON.TXT'), { target: { files: [file] } });
+  expect(await screen.findByText('แถวข้อมูล 4 แถว · อ่านได้ 2 · อ่านไม่ได้ 2')).toBeVisible();
+  expect(screen.getByText(/IO-11.*PID.*ตรวจไม่ได้/)).toBeVisible();
+  expect(screen.getByText(/บรรทัด 2.*PER-NN.*HOSPCODE9/)).toBeVisible();
+  expect(screen.getByText(/บรรทัด 3.*บรรทัดว่าง.*ตรวจไม่ได้/)).toBeVisible();
+  expect(screen.getByText(/บรรทัด 4.*2 ช่อง.*3 ช่อง.*ตรวจไม่ได้/)).toBeVisible();
+  expect(screen.getByText(/บรรทัด 5.*IO-09.*HOSPCODE9.*ช่องว่าง/)).toBeVisible();
+});

@@ -29,3 +29,113 @@ it('reports no readable header for a zero-byte file', async () => {
     status: 'no-header',
   });
 });
+
+function inspect(...parts: BlobPart[]) {
+  return inspectPersonHeader(new File(parts, 'PERSON.TXT'), personReference);
+}
+
+it.each([
+  ['IT-06 invalid byte after a readable prefix', new Uint8Array([0xff]), 'invalid-utf8'],
+  ['IT-07 UTF-16 signature', new Uint8Array([0xff, 0xfe, 0x41, 0]), 'invalid-utf8'],
+  ['IT-09 bare CR', '\rX', 'bare-cr'],
+])('%s makes the entire file unavailable', async (_, suffix, reason) => {
+  const result = await inspect('PID\n00042\n', suffix);
+  expect(result).toMatchObject({ status: 'unreadable', reason });
+  expect(result).not.toHaveProperty('missing');
+  expect(result).not.toHaveProperty('rows');
+});
+
+it('IT-05/08/10–12/17–19 counts physical lines, literal pipes and trailing fields', async () => {
+  const result = await inspect('\ufeffPID|CID\r\n"ทดสอบ"|\n\r\n"ทดสอบ|แยก"|0\n001\n9|99');
+  expect(result).toMatchObject({
+    status: 'checked',
+    rows: [
+      { line: 2, status: 'readable' },
+      { line: 3, status: 'blank' },
+      { line: 4, status: 'wrong-width', actual: 3 },
+      { line: 5, status: 'wrong-width', actual: 1 },
+      { line: 6, status: 'readable' },
+    ],
+    expectedWidth: 2,
+  });
+  expect(JSON.stringify(result)).not.toContain('ทดสอบ');
+});
+
+it('IT-22–24 distinguishes missing, reordered, extra and ambiguous names without exposing input headers', async () => {
+  const result = await inspect('\ufeffPID|HOSPCODE|PID|HOSPCODE9 |private-extra|private-extra\n');
+  expect(result).toMatchObject({
+    status: 'checked',
+    extraColumns: [4, 5, 6],
+    duplicates: [{ field: 'PID', columns: [1, 3] }, { columns: [5, 6] }],
+    reordered: true,
+    rows: [],
+  });
+  if (result.status !== 'checked') throw new Error('Expected a readable header');
+  expect(result.missing).toContain('HOSPCODE9');
+  expect(result.missing).not.toContain('PID');
+  expect(JSON.stringify(result)).not.toContain('private-extra');
+});
+
+it('IT-16/20/21 applies the empty-field rule only to an unambiguous HOSPCODE9 on readable rows', async () => {
+  const result = await inspect(
+    'PID|PID|HOSPCODE9\n1|2|\n1|2| \t\n1|2|NULL\n1|2|0\n1|2|""\n1|2|001\n1|2|99\n1|2|9',
+  );
+  expect(result).toMatchObject({
+    rows: [
+      { emptyHospcode9: true, whitespace: [] },
+      { emptyHospcode9: false, whitespace: [{ column: 3, field: 'HOSPCODE9' }] },
+      ...Array(6).fill({ emptyHospcode9: false, whitespace: [] }),
+    ],
+  });
+  expect(await inspect('HOSPCODE9|PID|HOSPCODE9\n|\t|a')).toMatchObject({
+    rows: [{ emptyHospcode9: false, whitespace: [{ column: 2, field: 'PID' }] }],
+  });
+  expect(await inspect('PID|HOSPCODE9\n001|')).toMatchObject({ rows: [{ emptyHospcode9: true }] });
+  expect(await inspect('HOSPCODE9|PID\n|001')).toMatchObject({ rows: [{ emptyHospcode9: true }] });
+});
+
+it.each([
+  ['IT-13 empty first line', '\nPID\n1', 'no-header'],
+  ['IT-14 zero bytes', '', 'no-header'],
+  ['IT-14 BOM only', '\ufeff', 'no-header'],
+])('%s cannot bind a header from a later line', async (_, contents, status) => {
+  expect(await inspect(contents)).toMatchObject({ status });
+});
+
+it.each([
+  ['header only', 'PID', []],
+  ['header with CRLF', 'PID\r\n', []],
+  ['one final LF', 'PID\n001\n', [{ line: 2, status: 'readable' }]],
+  [
+    'two final CRLF',
+    'PID\r\n001\r\n\r\n',
+    [
+      { line: 2, status: 'readable' },
+      { line: 3, status: 'blank' },
+    ],
+  ],
+])('IT-08/11/14 %s counts only physical records', async (_, contents, rows) => {
+  expect(await inspect(contents)).toMatchObject({ status: 'checked', rows });
+});
+
+it('IT-05/23 removes a single initial BOM and preserves interior BOM and header whitespace', async () => {
+  const result = await inspect('\ufeffPID|\ufeffHOSPCODE|HOSPCODE9 \n');
+  if (result.status !== 'checked') throw new Error('Expected a readable header');
+  expect(result.extraColumns).toEqual([2, 3]);
+  expect(result.missing).toEqual(expect.arrayContaining(['HOSPCODE', 'HOSPCODE9']));
+  expect(result.missing).not.toContain('PID');
+  expect(result.reordered).toBe(false);
+});
+
+it('IT-15–17 checks a real 34-field layout and withholds dependent results on overflow', async () => {
+  const result = await inspect(complete.trimEnd() + '\n' + Array(35).fill('x').join('|'));
+  expect(result).toMatchObject({
+    expectedWidth: 34,
+    rows: [
+      { line: 2, status: 'readable', emptyHospcode9: true },
+      { line: 3, status: 'wrong-width', actual: 35 },
+    ],
+  });
+  if (result.status !== 'checked') throw new Error('Expected a readable header');
+  expect(result.rows[1]).not.toHaveProperty('emptyHospcode9');
+});

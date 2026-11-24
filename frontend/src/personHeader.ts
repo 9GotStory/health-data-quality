@@ -47,15 +47,80 @@ export const personReference: PersonReference = {
   ],
 };
 
-export async function inspectPersonHeader(file: File, reference: PersonReference) {
-  const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
-  const header = text.split(/\r?\n/, 1)[0];
-  if (!header) return { fileName: file.name, reference, status: 'no-header' as const };
-  const names = header.split('|');
+function inspectColumns(names: string[], reference: PersonReference) {
+  const positions = new Map<string, number[]>();
+  const extraColumns: number[] = [];
+  let lastPosition = -1;
+  let reordered = false;
+  for (const [index, name] of names.entries()) {
+    const columns = positions.get(name);
+    if (columns) columns.push(index + 1);
+    else positions.set(name, [index + 1]);
+
+    const referencePosition = reference.columns.indexOf(name);
+    if (referencePosition === -1) extraColumns.push(index + 1);
+    else if (!columns) {
+      if (referencePosition < lastPosition) reordered = true;
+      lastPosition = referencePosition;
+    }
+  }
+  const duplicates = Array.from(positions)
+    .filter(([, columns]) => columns.length > 1)
+    .map(([name, columns]) => ({
+      field: reference.columns.includes(name) ? name : undefined,
+      columns,
+    }));
   return {
-    fileName: file.name,
-    reference,
+    bindings: names.map((name) =>
+      reference.columns.includes(name) && positions.get(name)?.length === 1 ? name : undefined,
+    ),
+    missing: reference.columns.filter((name) => !positions.has(name)),
+    extraColumns,
+    duplicates,
+    reordered,
+  };
+}
+
+export async function inspectPersonHeader(file: File, reference: PersonReference) {
+  const bytes = await file.arrayBuffer();
+  const base = { fileName: file.name, reference };
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return { ...base, status: 'unreadable' as const, reason: 'invalid-utf8' as const };
+  }
+  if (/\r(?!\n)/.test(text)) {
+    return { ...base, status: 'unreadable' as const, reason: 'bare-cr' as const };
+  }
+  const [header, ...lines] = text.split(/\r?\n/);
+  if (!header) return { ...base, status: 'no-header' as const };
+  if (text.endsWith('\n')) lines.pop();
+  const names = header.split('|');
+  const { bindings, ...columnReport } = inspectColumns(names, reference);
+  const hospcode9Index = bindings.indexOf('HOSPCODE9');
+  const rows = lines.map((record, index) => {
+    const line = index + 2;
+    if (record === '') return { line, status: 'blank' as const };
+    const fields = record.split('|');
+    if (fields.length !== names.length) {
+      return { line, status: 'wrong-width' as const, actual: fields.length };
+    }
+    const whitespace = fields.flatMap((value, index) =>
+      /^\p{White_Space}+$/u.test(value) ? [{ column: index + 1, field: bindings[index] }] : [],
+    );
+    return {
+      line,
+      status: 'readable' as const,
+      whitespace,
+      emptyHospcode9: fields[hospcode9Index] === '',
+    };
+  });
+  return {
+    ...base,
     status: 'checked' as const,
-    missing: reference.columns.filter((name) => !names.includes(name)),
+    rows,
+    expectedWidth: names.length,
+    ...columnReport,
   };
 }
