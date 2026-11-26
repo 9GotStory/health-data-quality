@@ -10,20 +10,21 @@ async function verifyReferenceRun(page) {
   };
   async function readStorage() {
     const originState = await page.context().storageState({ indexedDB: true });
-    const { session, cachedRequests, cachedPatientData } = await page.evaluate(async () => {
+    const browserStorage = await page.evaluate(async () => {
       const cachedRequests = [];
-      let cachedPatientData = false;
-      for (const name of await caches.keys()) {
+      const cacheNames = (await caches.keys()).sort();
+      for (const name of cacheNames) {
         const cache = await caches.open(name);
         for (const request of await cache.keys()) {
           cachedRequests.push([name, request.url]);
           const response = await cache.match(request);
-          if ((await response.text()).includes('private-fixture-id')) cachedPatientData = true;
+          if ((await response.text()).includes('private-fixture-id'))
+            throw new Error('Patient identifier in cached response');
         }
       }
-      return { session: { ...sessionStorage }, cachedRequests, cachedPatientData };
+      return { session: { ...sessionStorage }, cacheNames, cachedRequests };
     });
-    return JSON.stringify({ originState, session, cachedRequests, cachedPatientData });
+    return JSON.stringify({ originState, browserStorage });
   }
   const before = await readStorage();
   let requests = 0;
