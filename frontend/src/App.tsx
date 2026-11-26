@@ -6,7 +6,7 @@ import { CoverageResult } from './CoverageResult';
 type Selection =
   | { status: 'idle' | 'reading' }
   | { status: 'error'; message: string }
-  | { status: 'done'; report: SelectionReport };
+  | { status: 'done'; roundNumber: number; report: SelectionReport };
 
 export function App() {
   const [selection, setSelection] = useState<Selection>({ status: 'idle' });
@@ -22,7 +22,11 @@ export function App() {
       const pending = inspectSelection(files, pack);
       setSelection({ status: 'reading' });
       const report = await pending;
-      setSelection({ status: 'done', report });
+      setSelection({
+        status: 'done',
+        roundNumber: selection.status === 'done' ? selection.roundNumber + 1 : 1,
+        report,
+      });
     } catch (error) {
       setSelection({
         status: 'error',
@@ -80,7 +84,9 @@ export function App() {
       <div aria-live="polite" aria-atomic="true">
         {selection.status === 'reading' && <p className="mt-5">กำลังอ่านไฟล์ในเครื่อง…</p>}
         {selection.status === 'error' && <p className="mt-5 text-red-800">{selection.message}</p>}
-        {selection.status === 'done' && <CoverageResult report={selection.report} />}
+        {selection.status === 'done' && (
+          <CoverageResult key={selection.roundNumber} report={selection.report} />
+        )}
       </div>
     </main>
   );

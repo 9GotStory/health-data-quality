@@ -45,6 +45,8 @@ it('IO-13/15 isolates a bad CRC and identical duplicate basenames from a readabl
   const coverage = await screen.findByRole('list', { name: 'สถานะการส่ง 43 แฟ้มหลัก' });
   expect(coverage).toHaveTextContent(/PERSON.*อ่านไม่ได้.*IO-15.*ความสมบูรณ์/);
   expect(coverage).toHaveTextContent('HOME · มีข้อมูล');
+  expect(coverage).not.toHaveTextContent('second/icf.txt');
+  fireEvent.click(screen.getByLabelText('แสดงชื่อไฟล์และเส้นทางต้นฉบับบนหน้าจอ'));
   const duplicates = screen.getByText(/ICF · ชื่อแฟ้มซ้ำ 3 ไฟล์/).closest('li');
   expect(duplicates).toHaveTextContent('export/ICF.txt');
   expect(duplicates).toHaveTextContent(/second\/icf.txt.*IO-15.*ความสมบูรณ์/);
@@ -56,6 +58,7 @@ it('IO-14/15 identifies skipped entries without interpreting their contents', as
   render(<App />);
   select(archive('restricted'));
   const coverage = await screen.findByRole('list', { name: 'สถานะการส่ง 43 แฟ้มหลัก' });
+  fireEvent.click(screen.getByLabelText('แสดงชื่อไฟล์และเส้นทางต้นฉบับบนหน้าจอ'));
   for (const [name, reason] of [
     ['PERSON', 'วิธีบีบอัด'],
     ['DEATH', 'เข้ารหัส'],

@@ -17,7 +17,7 @@ async function verifyPersonHeader(page) {
       for (const [fixture, expected] of [
         ['complete', 'พบชื่อคอลัมน์อ้างอิงครบ 34 ชื่อในบรรทัดแรก'],
         ['missing', 'ข้อผิดพลาดในบรรทัดแรก · ขาด 1 คอลัมน์'],
-        ['empty', 'ตรวจชื่อคอลัมน์ไม่ได้ เพราะไม่มีหัวตารางในบรรทัดแรก'],
+        ['empty', /IO-03\/06 · ตรวจชื่อคอลัมน์ไม่ได้ เพราะไม่มีหัวตารางในบรรทัดแรก/],
       ]) {
         await input.setInputFiles(
           fixture === 'empty'

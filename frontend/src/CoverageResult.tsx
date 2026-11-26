@@ -7,6 +7,7 @@ import {
   reportCsv,
   statusLabels,
   type FileResult,
+  type FileLocation,
   type Finding,
   type ResultFilter,
 } from './reportOutput';
@@ -17,6 +18,7 @@ const labels = {
   review: 'ข้อควรตรวจทาน',
   cannot_check: 'ตรวจไม่ได้',
   pass: 'ผ่าน',
+  not_applicable: 'ไม่เข้าเงื่อนไข',
 };
 
 function downloadCsv(files: FileResult[], filter: ResultFilter, version: string) {
@@ -33,10 +35,12 @@ function FindingList({
   findings,
   file,
   version,
+  nameKey,
 }: {
   findings: Finding[];
   file: FileResult;
   version: string;
+  nameKey: keyof FileLocation;
 }) {
   // Missing header fields share one reason, location and source.
   const isMissing = (item: Finding) =>
@@ -69,10 +73,10 @@ function FindingList({
         .map((item, index) => (
           <div key={index} className="my-2">
             <p>
-              {item.file && item.file + ' · '}
+              {item.file && item.file[nameKey] + ' · '}
               {item.line && 'บรรทัด ' + item.line + ' · '}
               {item.rule} · {item.field && item.field + ' · '}
-              {item.rule === 'IO-03/06' ? <span>{item.reason}</span> : item.reason}
+              {item.reason}
             </p>
             <p className="text-sm text-slate-600">
               {labels[item.result]} · {item.source} · {version}
@@ -87,19 +91,21 @@ function FileDetails({
   file,
   findings,
   report,
+  nameKey,
+  filter,
 }: {
   file: FileResult;
   findings: Finding[];
   report: SelectionReport;
+  nameKey: keyof FileLocation;
+  filter: ResultFilter;
 }) {
   const txt = file.txt;
-  const readable =
-    txt?.status === 'checked' ? txt.rows.filter((row) => row.status === 'readable').length : 0;
   return (
     <div className="space-y-2 border-l-2 border-slate-200 py-2 pl-4">
       {txt && (
         <>
-          <p className="break-all text-sm">ไฟล์ที่เลือก · {file.file}</p>
+          <p className="break-all text-sm">ไฟล์ที่เลือก · {file.file[nameKey]}</p>
           {txt.status === 'checked' && (
             <>
               {!txt.missing.length && (
@@ -107,15 +113,29 @@ function FileDetails({
               )}
               <p>อ่านไฟล์ด้วย UTF-8 ได้ · หัวตารางมี {txt.expectedWidth} ช่อง</p>
               <p>
-                {txt.rows.length
-                  ? `แถวข้อมูล ${txt.rows.length} แถว · อ่านได้ ${readable} · อ่านไม่ได้ ${txt.rows.length - readable}`
+                {file.rows?.total
+                  ? `แถวข้อมูล ${file.rows.total} แถว · อ่านได้ ${file.rows.readable} · อ่านไม่ได้ ${file.rows.unreadable}`
                   : 'มีเฉพาะหัวตาราง · ไม่มีแถวข้อมูล'}
               </p>
+              {filter === 'all' && Boolean(file.rows?.readable) && (
+                <ul aria-label="บรรทัดที่อ่านได้">
+                  {txt.rows
+                    .filter((row) => row.status === 'readable')
+                    .map((row) => (
+                      <li key={row.line}>บรรทัด {row.line} · อ่านได้</li>
+                    ))}
+                </ul>
+              )}
             </>
           )}
         </>
       )}
-      <FindingList file={file} findings={findings} version={report.pack.version} />
+      <FindingList
+        file={file}
+        findings={findings}
+        version={report.pack.version}
+        nameKey={nameKey}
+      />
       {txt && (
         <>
           <p>{file.limitation}</p>
@@ -135,10 +155,12 @@ function FileStatus({
   file,
   filter,
   report,
+  nameKey,
 }: {
   file: FileResult;
   filter: ResultFilter;
   report: SelectionReport;
+  nameKey: keyof FileLocation;
 }) {
   const findings = filteredFindings(file, filter);
   if (file.status === 'absent')
@@ -157,14 +179,19 @@ function FileStatus({
             </p>
             <ul>
               {file.members.map((member, index) => (
-                <li key={index}>{member.name}</li>
+                <li key={index}>{member[nameKey]}</li>
               ))}
             </ul>
           </>
         ) : (
-          <span>{file.name}</span>
+          <span>{file.file[nameKey]}</span>
         )}
-        <FindingList findings={findings} file={file} version={report.pack.version} />
+        <FindingList
+          findings={findings}
+          file={file}
+          version={report.pack.version}
+          nameKey={nameKey}
+        />
       </li>
     );
   return (
@@ -172,12 +199,19 @@ function FileStatus({
       <details open={report.submitted === 1 || (filter !== 'all' && findings.length > 0)}>
         <summary className="cursor-pointer font-semibold">
           {file.name} · {statusLabels[file.status]}
-          {file.txt?.status === 'checked' &&
+          {(filter === 'all' || filter === 'error') &&
+            file.txt?.status === 'checked' &&
             file.txt.missing.length > 0 &&
             ` · ขาด ${file.txt.missing.length} คอลัมน์`}
         </summary>
-        {!file.txt && <p>ไฟล์ที่เลือก · {file.file}</p>}
-        <FileDetails file={file} findings={findings} report={report} />
+        {!file.txt && <p>ไฟล์ที่เลือก · {file.file[nameKey]}</p>}
+        <FileDetails
+          file={file}
+          findings={findings}
+          report={report}
+          nameKey={nameKey}
+          filter={filter}
+        />
       </details>
     </li>
   );
@@ -185,6 +219,8 @@ function FileStatus({
 
 export function CoverageResult({ report }: { report: SelectionReport }) {
   const [filter, setFilter] = useState<ResultFilter>('all');
+  const [showOriginal, setShowOriginal] = useState(false);
+  const nameKey = showOriginal ? 'original' : 'label';
   const files = useMemo(() => fileResults(report), [report]);
   const outside = files.filter((file) => file.status === 'outside');
   const count = files.reduce((total, file) => total + filteredFindings(file, filter).length, 0);
@@ -219,13 +255,31 @@ export function CoverageResult({ report }: { report: SelectionReport }) {
           ดาวน์โหลด CSV
         </button>
       </div>
+      {files.some((file) =>
+        (file.members ?? [file.file]).some((location) => location.original !== location.label),
+      ) && (
+        <label className="my-3 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={showOriginal}
+            onChange={(event) => setShowOriginal(event.target.checked)}
+          />
+          แสดงชื่อไฟล์และเส้นทางต้นฉบับบนหน้าจอ
+        </label>
+      )}
       <p role="status">ผลตามตัวกรอง {count} รายการ · CSV รวมผลที่แสดงและสถานะแฟ้มทั้งหมด</p>
       {outside.length > 0 && (
         <section className="my-4">
           <h3 className="font-semibold">นอกขอบเขต 43 แฟ้มหลัก</h3>
           <ul>
             {outside.map((file, index) => (
-              <FileStatus key={index} file={file} filter={filter} report={report} />
+              <FileStatus
+                key={index}
+                file={file}
+                filter={filter}
+                report={report}
+                nameKey={nameKey}
+              />
             ))}
           </ul>
         </section>
@@ -234,7 +288,13 @@ export function CoverageResult({ report }: { report: SelectionReport }) {
         {files
           .filter((file) => file.status !== 'outside')
           .map((file) => (
-            <FileStatus key={file.name} file={file} filter={filter} report={report} />
+            <FileStatus
+              key={file.name}
+              file={file}
+              filter={filter}
+              report={report}
+              nameKey={nameKey}
+            />
           ))}
       </ul>
       <p className="mt-5 text-sm">

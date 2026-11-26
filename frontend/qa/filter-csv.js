@@ -4,7 +4,7 @@ async function verifyFilteredCsv(page) {
   const txt = (name, contents) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(contents) });
   const privateName = 'PRIVATE-SYNTHETIC-NAME';
   const cid = '1234567890123';
-  const outside = '=fixture,"quoted"\nnext.txt';
+  const outside = '=fixture,"quoted"\n' + privateName + '-' + cid + '.txt';
   let requests = 0;
   const block = (route) => {
     requests++;
@@ -14,6 +14,7 @@ async function verifyFilteredCsv(page) {
   try {
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 850 });
+      await page.getByLabel('ชุดอ้างอิงสำหรับรอบถัดไป').selectOption('fixture-1');
       await page
         .getByLabel('เลือกไฟล์ TXT หรือ ZIP')
         .setInputFiles([
@@ -30,6 +31,8 @@ async function verifyFilteredCsv(page) {
         throw new Error('Unexpected detail in filtered UI');
       if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
         throw new Error('Report overflows viewport');
+      await page.getByLabel('แสดงชื่อไฟล์และเส้นทางต้นฉบับบนหน้าจอ').check();
+      await page.getByText(outside, { exact: true }).waitFor();
       const pending = page.waitForEvent('download');
       await page.getByRole('button', { name: 'ดาวน์โหลด CSV' }).click();
       const download = await pending;
@@ -38,11 +41,11 @@ async function verifyFilteredCsv(page) {
       for await (const chunk of stream) chunks.push(chunk);
       const csv = Buffer.concat(chunks).toString('utf8');
       const expected = [
-        '\ufeff"result","file","line","field","rule","reason","source","version","file_status"\r\n',
+        '\ufeff"result","file","line","field","rule","reason","source","version","file_status","rows_total","rows_readable","rows_unreadable"\r\n',
         '"error","PERSON.TXT","2","HOSPCODE9","PER-REQUIRED"',
-        '"file_status","\'=fixture,""quoted""\nnext.txt","","","","นอกขอบเขต"',
+        '"file_status","รายการนอกขอบเขต 1","","","","นอกขอบเขต"',
         '"file_status","HOME","",""',
-        '"schema-1"',
+        '"fixture-1"',
       ];
       if (!expected.every((part) => csv.includes(part)))
         throw new Error('Downloaded CSV lost location, coverage or quoting');

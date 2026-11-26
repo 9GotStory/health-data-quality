@@ -104,6 +104,26 @@ function rowFindings(txt: Checked, lookupSource: string) {
         source: empty ? txt.reference.source : policy,
       });
     }
+    if (row.hospcode9 === 'present') {
+      findings.push({
+        line,
+        field: 'HOSPCODE9',
+        result: 'pass',
+        rule: 'PER-REQUIRED',
+        reason: 'มีค่าในช่องบังคับกรอก',
+        source: txt.reference.source,
+      });
+    }
+    if (txt.reference.facilityLookupField && row.hospcode9 === 'empty') {
+      findings.push({
+        line,
+        field: txt.reference.facilityLookupField,
+        result: 'not_applicable',
+        rule: 'FACILITY-LOOKUP',
+        reason: 'ไม่มีรหัสให้เทียบ',
+        source: lookupSource,
+      });
+    }
     if (row.facilityLookup) {
       const lookup = {
         found: ['pass', 'พบในชุดรหัสสังเคราะห์'],

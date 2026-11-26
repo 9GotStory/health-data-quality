@@ -186,3 +186,14 @@ it('filters inspection findings while keeping all 43 file statuses and the expor
   expect(screen.queryByText(/บรรทัด 2.*PER-REQUIRED/)).not.toBeInTheDocument();
   expect(document.body).not.toHaveTextContent(/PRIVATE-NAME|1234567890123/);
 });
+
+it('shows readable line positions and exposes original paths only when asked', async () => {
+  render(<App />);
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP'), {
+    target: { files: [new File(['HID\nprivate'], 'PRIVATE-NAME-1234567890123/HOME.TXT')] },
+  });
+  expect(await screen.findByText('บรรทัด 2 · อ่านได้')).toBeVisible();
+  expect(document.body).not.toHaveTextContent(/PRIVATE-NAME|1234567890123/);
+  fireEvent.click(screen.getByLabelText('แสดงชื่อไฟล์และเส้นทางต้นฉบับบนหน้าจอ'));
+  expect(screen.getByText(/ไฟล์ที่เลือก.*PRIVATE-NAME-1234567890123\/HOME.TXT/)).toBeVisible();
+});

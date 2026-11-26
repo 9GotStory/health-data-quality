@@ -4,8 +4,8 @@ import { policy, txtFindings } from './txtFindings';
 
 type Coverage = SelectionReport['coverage'][number];
 export type TxtReport = Extract<Coverage, { status: 'submitted' }>['report'];
-type Severity = 'error' | 'review' | 'cannot_check' | 'pass';
-export type ResultFilter = 'all' | Exclude<Severity, 'pass'>;
+type Severity = 'error' | 'review' | 'cannot_check' | 'pass' | 'not_applicable';
+export type ResultFilter = 'all' | Exclude<Severity, 'pass' | 'not_applicable'>;
 export type Finding = {
   result: Severity;
   rule: string;
@@ -13,15 +13,18 @@ export type Finding = {
   source: string;
   line?: number;
   field?: string;
-  file?: string;
+  file?: FileLocation;
 };
+
+export type FileLocation = { label: string; original: string };
 
 export type FileResult = {
   name: string;
-  file: string;
+  file: FileLocation;
   status: 'absent' | 'duplicate' | 'unreadable' | 'header_only' | 'with_data' | 'outside';
   limitation?: string;
-  members?: SelectionReport['outside'];
+  members?: FileLocation[];
+  rows?: { total: number; readable: number; unreadable: number };
   txt?: TxtReport;
   findings: Finding[];
 };
@@ -35,7 +38,7 @@ export const statusLabels = {
   outside: 'นอกขอบเขต',
 };
 
-function submittedFile(txt: TxtReport, round: SelectionReport): FileResult {
+function submittedFile(txt: TxtReport, file: FileLocation, round: SelectionReport): FileResult {
   const findings = txtFindings(txt, round);
   const rules = round.manifest.filter((rule) => rule.file === txt.reference.name);
   for (const rule of rules) {
@@ -56,38 +59,53 @@ function submittedFile(txt: TxtReport, round: SelectionReport): FileResult {
       ? 'กฎรายแถวของชุดทดสอบครอบคลุมเฉพาะค่าว่างของ HOSPCODE9 และการเทียบรหัสสังเคราะห์เมื่อผูกคอลัมน์ได้ กฎความหมายอื่นยังตรวจไม่ได้'
       : 'ยังไม่พร้อมตรวจความหมายของข้อมูลรายแถวนอกเหนือจากการตรวจค่าว่างของ HOSPCODE9 ตาม PER-REQUIRED · กฎอื่นตรวจไม่ได้'
     : 'การตรวจความหมาย · ตรวจไม่ได้ เพราะยังไม่เปิดใช้กฎรายแถวสำหรับแฟ้มนี้';
-  return { name: txt.reference.name, file: txt.fileName, status, txt, findings, limitation };
+  let rows;
+  if (txt.status === 'checked') {
+    const total = txt.rows.length;
+    const readable = txt.rows.filter((row) => row.status === 'readable').length;
+    rows = { total, readable, unreadable: total - readable };
+  }
+  return { name: txt.reference.name, file, status, txt, findings, limitation, rows };
 }
 
 type Entry = SelectionReport['outside'][number];
 
-function transportFindings({ name, problem }: Entry): Finding[] {
+function transportFindings(file: FileLocation, problem: Entry['problem']): Finding[] {
   if (!problem) return [];
-  const [rule, reason] = problem.split(' · ');
-  return [{ file: name, result: 'cannot_check', rule, reason, source: policy }];
+  return [{ file, result: 'cannot_check', ...problem, source: policy }];
+}
+
+function coreLocation(original: string, ordinal?: number): FileLocation {
+  // The inspector has already matched this basename against the reference registry.
+  const basename = original.split(/[\\/]/).pop()!;
+  return { original, label: ordinal ? basename + ' (' + ordinal + ')' : basename };
 }
 
 export function fileResults(round: SelectionReport): FileResult[] {
   const files = round.coverage.map((entry): FileResult => {
     const { name } = entry;
+    const group = { label: name, original: name };
     switch (entry.status) {
       case 'submitted':
-        return submittedFile(entry.report, round);
+        return submittedFile(entry.report, coreLocation(entry.report.fileName), round);
       case 'absent':
-        return { name, file: name, status: 'absent', findings: [] };
-      case 'unavailable':
+        return { name, file: group, status: 'absent', findings: [] };
+      case 'unavailable': {
+        const file = coreLocation(entry.fileName);
         return {
           name,
-          file: entry.fileName,
+          file,
           status: 'unreadable',
-          findings: transportFindings({ name: entry.fileName, problem: entry.problem }),
+          findings: transportFindings(file, entry.problem),
         };
-      case 'duplicate':
+      }
+      case 'duplicate': {
+        const members = entry.members.map((member, index) => coreLocation(member.name, index + 1));
         return {
           name,
-          file: name,
+          file: group,
           status: 'duplicate',
-          members: entry.members,
+          members,
           findings: [
             {
               result: 'cannot_check',
@@ -95,18 +113,27 @@ export function fileResults(round: SelectionReport): FileResult[] {
               reason: 'ชื่อแฟ้มหลักซ้ำ โปรดให้ชุดที่เลือกมีแฟ้มชื่อนี้เพียงไฟล์เดียว',
               source: policy,
             },
-            ...entry.members.flatMap(transportFindings),
+            ...entry.members.flatMap((entry, index) =>
+              transportFindings(members[index], entry.problem),
+            ),
           ],
         };
+      }
     }
   });
   return files.concat(
-    round.outside.map((entry) => ({
-      name: entry.name,
-      file: entry.name,
-      status: 'outside',
-      findings: transportFindings(entry),
-    })),
+    round.outside.map((entry, index) => {
+      const label = /^(POLICY|DATA_CORRECT)\.txt$/i.test(entry.name)
+        ? entry.name
+        : 'รายการนอกขอบเขต ' + (index + 1);
+      const file = { original: entry.name, label };
+      return {
+        name: label,
+        file,
+        status: 'outside',
+        findings: transportFindings(file, entry.problem),
+      };
+    }),
   );
 }
 
@@ -124,13 +151,26 @@ function csvCell(text: string) {
 
 export function reportCsv(files: FileResult[], filter: ResultFilter, version: string) {
   const rows = [
-    ['result', 'file', 'line', 'field', 'rule', 'reason', 'source', 'version', 'file_status'],
+    [
+      'result',
+      'file',
+      'line',
+      'field',
+      'rule',
+      'reason',
+      'source',
+      'version',
+      'file_status',
+      'rows_total',
+      'rows_readable',
+      'rows_unreadable',
+    ],
   ];
   for (const file of files) {
-    for (const name of file.members?.map((member) => member.name) ?? [file.file]) {
+    for (const location of file.members ?? [file.file]) {
       rows.push([
         'file_status',
-        name,
+        location.label,
         '',
         '',
         '',
@@ -138,18 +178,24 @@ export function reportCsv(files: FileResult[], filter: ResultFilter, version: st
         policy,
         version,
         file.status,
+        String(file.rows?.total ?? ''),
+        String(file.rows?.readable ?? ''),
+        String(file.rows?.unreadable ?? ''),
       ]);
     }
     for (const finding of filteredFindings(file, filter)) {
       rows.push([
         finding.result,
-        finding.file ?? file.file,
+        (finding.file ?? file.file).label,
         String(finding.line ?? ''),
         finding.field ?? '',
         finding.rule,
         finding.reason,
         finding.source,
         version,
+        '',
+        '',
+        '',
         '',
       ]);
     }

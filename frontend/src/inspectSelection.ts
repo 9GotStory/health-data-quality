@@ -11,14 +11,18 @@ import { referencePacks, type ReferencePack } from './referencePacks';
 import { inspectTxt } from './inspectTxt';
 import { ruleManifest } from './ruleManifest';
 
-type EntryDetail = { name: string; problem?: string };
+type TransportProblem = { rule: 'IO-14' | 'IO-15'; reason: string };
+type EntryDetail = { name: string; problem?: TransportProblem };
 type TxtInput = Pick<File, 'name' | 'arrayBuffer'> & { verifyIntegrity?: () => Promise<void> };
 
-type Input = TxtInput | { name: string; problem: string };
+type Input = TxtInput | { name: string; problem: TransportProblem };
 
 export class SelectionError extends Error {}
 const invalidDirectory = 'IO-15 · อ่านรายการใน ZIP ไม่ครบ จึงหยุดรอบตรวจ โปรดเลือก ZIP อีกครั้ง';
-const invalidEntry = 'IO-15 · อ่านหรือตรวจความสมบูรณ์ของข้อมูลใน ZIP ไม่สำเร็จ';
+const invalidEntry: TransportProblem = {
+  rule: 'IO-15',
+  reason: 'อ่านหรือตรวจความสมบูรณ์ของข้อมูลใน ZIP ไม่สำเร็จ',
+};
 
 // For duplicates and supplements, verify the transport without decoding or retaining TXT rows.
 async function inspectEntryOnly(file: Input): Promise<EntryDetail> {
@@ -31,19 +35,19 @@ async function inspectEntryOnly(file: Input): Promise<EntryDetail> {
   }
 }
 
-function zipEntryProblem(entry: Entry) {
+function zipEntryProblem(entry: Entry): TransportProblem | undefined {
   const path = entry.filename.replaceAll('\\', '/').replace(/\/$/, '');
   if (
     /^[a-z]:/i.test(path) ||
     path.includes('\0') ||
     path.split('/').some((part) => !part || part === '.' || part === '..')
   )
-    return 'IO-14 · เส้นทางไม่ปลอดภัย';
-  if (entry.symlink) return 'IO-14 · ไม่ตาม symlink';
-  if (!entry.directory && /\.zip$/i.test(path)) return 'IO-14 · ไม่เปิด ZIP ซ้อน';
-  if (entry.encrypted) return 'IO-15 · รายการเข้ารหัส';
+    return { rule: 'IO-14', reason: 'เส้นทางไม่ปลอดภัย' };
+  if (entry.symlink) return { rule: 'IO-14', reason: 'ไม่ตาม symlink' };
+  if (!entry.directory && /\.zip$/i.test(path)) return { rule: 'IO-14', reason: 'ไม่เปิด ZIP ซ้อน' };
+  if (entry.encrypted) return { rule: 'IO-15', reason: 'รายการเข้ารหัส' };
   if (entry.compressionMethod !== 0 && entry.compressionMethod !== 8)
-    return 'IO-15 · ไม่รองรับวิธีบีบอัดของรายการนี้';
+    return { rule: 'IO-15', reason: 'ไม่รองรับวิธีบีบอัดของรายการนี้' };
 }
 
 async function inspectFiles(files: Input[], pack: ReferencePack) {
