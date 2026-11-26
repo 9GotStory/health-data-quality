@@ -130,3 +130,29 @@ it('reports ambiguous names independently from the order of uniquely bound colum
   expect(await screen.findByText(/IO-11.*HOSPCODE9.*1, 3/)).toBeVisible();
   expect(screen.queryByText(/ลำดับคอลัมน์ต่างจากทะเบียน/)).not.toBeInTheDocument();
 });
+
+it('keeps the reported pack and lookup until the user submits the same TXT for another run', async () => {
+  render(<App />);
+  const select = screen.getByRole('combobox', { name: 'ชุดอ้างอิงสำหรับรอบถัดไป' });
+  const input = screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP');
+  const file = new File(['PID|HOSPCODE9\nsecret-id|TEST-A'], 'PERSON.TXT');
+  const run = () => fireEvent.change(input, { target: { files: [file] } });
+
+  fireEvent.change(select, { target: { value: 'fixture-1' } });
+  run();
+  expect(await screen.findByText('ชุดที่ใช้ตรวจ · ชุดทดสอบสังเคราะห์ 1 (fixture-1)')).toBeVisible();
+  expect(screen.getByText(/บรรทัด 2.*พบในชุดรหัสสังเคราะห์/)).toBeVisible();
+  fireEvent.change(select, { target: { value: 'fixture-2' } });
+  expect(screen.getByText(/ชุดที่ใช้ตรวจ.*fixture-1/)).toBeVisible();
+  expect(screen.getByText(/บรรทัด 2.*พบในชุดรหัสสังเคราะห์/)).toBeVisible();
+  run();
+  expect(await screen.findByText(/ชุดที่ใช้ตรวจ.*fixture-2/)).toBeVisible();
+  expect(screen.getByText(/บรรทัด 2.*ไม่พบในชุดรหัสสังเคราะห์/)).toBeVisible();
+
+  fireEvent.change(select, { target: { value: 'schema-1' } });
+  run();
+  expect(await screen.findByText(/ชุดที่ใช้ตรวจ.*schema-1/)).toBeVisible();
+  expect(screen.getByText(/บรรทัด 2.*ตรวจไม่ได้.*ขาดชุดรหัส/)).toBeVisible();
+  expect(screen.getByText(/ยังไม่ทราบจำนวนกฎทั้งหมด/)).toBeVisible();
+  expect(screen.queryByText(/secret-id/)).not.toBeInTheDocument();
+});

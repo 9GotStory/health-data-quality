@@ -7,8 +7,9 @@ import {
   WARNING_MISMATCHED_CENTRAL_DIRECTORY_OFFSET,
   WARNING_MISMATCHED_ZIP64_END_OF_CENTRAL_DIRECTORY,
 } from '@zip.js/zip.js/index-native.js';
+import { referencePacks, type ReferencePack } from './referencePacks';
 import { inspectTxt } from './inspectTxt';
-import { fileReferences } from './structureReference';
+import { ruleManifest } from './ruleManifest';
 
 type EntryDetail = { name: string; problem?: string };
 type TxtInput = Pick<File, 'name' | 'arrayBuffer'> & { verifyIntegrity?: () => Promise<void> };
@@ -45,7 +46,8 @@ function zipEntryProblem(entry: Entry) {
     return 'IO-15 · ไม่รองรับวิธีบีบอัดของรายการนี้';
 }
 
-async function inspectFiles(files: Input[]) {
+async function inspectFiles(files: Input[], pack: ReferencePack) {
+  const fileReferences = pack.schema.files;
   const outside: EntryDetail[] = [];
   const byName = new Map<string, Input[]>();
   for (const file of files) {
@@ -73,7 +75,7 @@ async function inspectFiles(files: Input[]) {
       const { name: fileName, problem } = group[0];
       coverage.push({ name: reference.name, status: 'unavailable' as const, fileName, problem });
     } else {
-      const report = await inspectTxt(group[0], reference);
+      const report = await inspectTxt(group[0], reference, pack.facility);
       if (
         group[0].verifyIntegrity &&
         report.status === 'unreadable' &&
@@ -90,10 +92,10 @@ async function inspectFiles(files: Input[]) {
       }
     }
   }
-  return { coverage, outside, submitted: byName.size };
+  return { pack, manifest: ruleManifest(pack), coverage, outside, submitted: byName.size };
 }
 
-async function inspectZip(file: File) {
+async function inspectZip(file: File, pack: ReferencePack) {
   const reader = new ZipReader(new BlobReader(file), {
     useWebWorkers: false,
     checkSignature: true,
@@ -130,17 +132,17 @@ async function inspectZip(file: File) {
           },
         });
     }
-    return await inspectFiles(inputs);
+    return await inspectFiles(inputs, pack);
   } finally {
     await reader.close();
   }
 }
 
-export function inspectSelection(files: File[]) {
-  if (files.length === 1 && /\.zip$/i.test(files[0].name)) return inspectZip(files[0]);
+export function inspectSelection(files: File[], pack: ReferencePack = referencePacks['schema-1']) {
+  if (files.length === 1 && /\.zip$/i.test(files[0].name)) return inspectZip(files[0], pack);
   if (files.some((file) => !/\.txt$/i.test(file.name)))
     throw new SelectionError('IO-01 · โปรดเลือก ZIP หนึ่งไฟล์ หรือ TXT จากชุดส่งออกเดียวกัน');
-  return inspectFiles(files);
+  return inspectFiles(files, pack);
 }
 
 export type SelectionReport = Awaited<ReturnType<typeof inspectFiles>>;

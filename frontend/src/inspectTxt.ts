@@ -1,3 +1,4 @@
+import type { ReferencePack } from './referencePacks';
 import type { FileReference } from './structureReference';
 
 function inspectColumns(names: string[], reference: FileReference) {
@@ -50,6 +51,7 @@ function requiredValueStatus(value: string | undefined) {
 export async function inspectTxt(
   file: Pick<File, 'name' | 'arrayBuffer'>,
   reference: FileReference,
+  facility: ReferencePack['facility'] = null,
 ) {
   let bytes: ArrayBuffer;
   try {
@@ -88,11 +90,21 @@ export async function inspectTxt(
     const whitespace = fields.flatMap((value, index) =>
       whitespaceOnly.test(value) ? [{ column: index + 1, field: bindings[index] }] : [],
     );
+    const hospcode9 = requiredValueStatus(fields[hospcode9Index]);
+    let facilityLookup;
+    if (reference.checksRequiredHospcode9 && hospcode9 === 'present') {
+      if (!facility) facilityLookup = 'missing-reference' as const;
+      else
+        facilityLookup = facility.codes.includes(fields[hospcode9Index])
+          ? ('found' as const)
+          : ('not-found' as const);
+    }
     return {
       line,
       status: 'readable' as const,
       whitespace,
-      hospcode9: requiredValueStatus(fields[hospcode9Index]),
+      hospcode9,
+      facilityLookup,
     };
   });
   return {

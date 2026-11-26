@@ -1,7 +1,8 @@
 import { useState, type ChangeEvent } from 'react';
 import type { inspectTxt } from './inspectTxt';
 import { inspectSelection, SelectionError, type SelectionReport } from './inspectSelection';
-import { structureRegistry } from './structureReference';
+import { referencePacks, type ReferencePack } from './referencePacks';
+import { ReferenceManifest } from './ReferenceManifest';
 
 type Report = Awaited<ReturnType<typeof inspectTxt>>;
 type Selection =
@@ -32,6 +33,12 @@ function HeaderResult({ report }: { report: CheckedReport }) {
   );
 }
 
+const lookupLabels = {
+  found: 'พบในชุดรหัสสังเคราะห์',
+  'not-found': 'ไม่พบในชุดรหัสสังเคราะห์',
+  'missing-reference': 'ตรวจไม่ได้ เพราะขาดชุดรหัสหน่วยบริการ',
+};
+
 function RowResult({ row, expectedWidth }: { row: DataRow; expectedWidth: number }) {
   if (row.status !== 'readable') {
     const reason =
@@ -50,6 +57,11 @@ function RowResult({ row, expectedWidth }: { row: DataRow; expectedWidth: number
       {row.hospcode9 === 'empty' && (
         <p className="text-red-800">
           บรรทัด {row.line} · ข้อผิดพลาดตามมาตรฐาน PER-REQUIRED · HOSPCODE9 ต้องมีค่า
+        </p>
+      )}
+      {row.facilityLookup && (
+        <p>
+          บรรทัด {row.line} · FACILITY-LOOKUP · HOSPCODE9 · {lookupLabels[row.facilityLookup]}
         </p>
       )}
       {row.whitespace.map(({ column, field }) => (
@@ -127,7 +139,7 @@ function TxtResult({ report }: { report: Report }) {
   );
 }
 
-function FileDetails({ report }: { report: Report }) {
+function FileDetails({ report, fixture }: { report: Report; fixture: boolean }) {
   const { reference } = report;
   return (
     <div className="space-y-2 border-l-2 border-slate-200 py-2 pl-4">
@@ -136,7 +148,9 @@ function FileDetails({ report }: { report: Report }) {
       {reference.unknownPositions.map((position) => (
         <p key={position}>ตำแหน่งที่ {position} · คู่มือไม่ระบุชื่อคอลัมน์ กฎที่ต้องใช้ชื่อนี้จึงตรวจไม่ได้</p>
       ))}
-      {reference.checksRequiredHospcode9 ? (
+      {reference.checksRequiredHospcode9 && fixture ? (
+        <p>ตรวจค่าว่างของ HOSPCODE9 และเทียบรหัสกับชุดสังเคราะห์ที่เลือก</p>
+      ) : reference.checksRequiredHospcode9 ? (
         <p>
           ยังไม่พร้อมตรวจความหมายของข้อมูลรายแถวนอกเหนือจากการตรวจค่าว่างของ HOSPCODE9 ตาม PER-REQUIRED ·
           กฎอื่นตรวจไม่ได้
@@ -145,8 +159,7 @@ function FileDetails({ report }: { report: Report }) {
         <p>การตรวจความหมาย · ตรวจไม่ได้ เพราะยังไม่เปิดใช้กฎรายแถวสำหรับแฟ้มนี้</p>
       )}
       <p className="text-sm">
-        {reference.name === 'PERSON' ? 'PER-STRUCT' : 'IO-10'} · ตรวจชื่อคอลัมน์ตามทะเบียน ·{' '}
-        <span>{reference.version}</span>
+        {reference.headerRule} · ตรวจชื่อคอลัมน์ตามทะเบียน · <span>{reference.version}</span>
       </p>
       <a href={reference.url} rel="noreferrer" className="text-sm text-teal-800 underline">
         {reference.source}
@@ -172,6 +185,7 @@ function CoverageResult({ report }: { report: SelectionReport }) {
   return (
     <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 sm:p-7">
       <h2 className="text-xl font-semibold">รายงานความครอบคลุม</h2>
+      <ReferenceManifest report={report} />
       <p className="mt-2">
         แฟ้มหลักที่ส่ง {report.submitted} จาก 43 แฟ้ม · ไม่ได้ส่ง {43 - report.submitted} แฟ้ม
       </p>
@@ -221,15 +235,15 @@ function CoverageResult({ report }: { report: SelectionReport }) {
                     file.missing.length > 0 &&
                     ` · ขาด ${file.missing.length} คอลัมน์`}
                 </summary>
-                <FileDetails report={file} />
+                <FileDetails report={file} fixture={Boolean(report.pack.facility)} />
               </details>
             </li>
           );
         })}
       </ul>
       <p className="mt-5 text-sm">
-        ทะเบียนโครงสร้าง {structureRegistry.version} · SHA-256 ของคู่มือ{' '}
-        <code className="break-all">{structureRegistry.sha256}</code>
+        ทะเบียนโครงสร้าง {report.pack.schema.version} · SHA-256 ของคู่มือ{' '}
+        <code className="break-all">{report.pack.schema.sha256}</code>
       </p>
     </section>
   );
@@ -238,14 +252,15 @@ function CoverageResult({ report }: { report: SelectionReport }) {
 export function App() {
   const [selection, setSelection] = useState<Selection>({ status: 'idle' });
 
+  const [pack, setPack] = useState<ReferencePack>(referencePacks['schema-1']);
+  const packs = Object.values(referencePacks);
+
   async function selectFile(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.currentTarget.files ?? []);
-    if (!files.length) {
-      setSelection({ status: 'idle' });
-      return;
-    }
+    if (!files.length) return;
+    event.currentTarget.value = '';
     try {
-      const pending = inspectSelection(files);
+      const pending = inspectSelection(files, pack);
       setSelection({ status: 'reading' });
       const report = await pending;
       setSelection({ status: 'done', report });
@@ -267,6 +282,29 @@ export function App() {
         </p>
       </header>
       <section className="rounded-xl border border-slate-200 bg-white p-5 sm:p-7">
+        <label htmlFor="reference-pack" className="block text-lg font-semibold">
+          ชุดอ้างอิงสำหรับรอบถัดไป
+        </label>
+        <select
+          id="reference-pack"
+          className="mt-2 w-full rounded border border-slate-300 p-2"
+          disabled={selection.status === 'reading'}
+          value={pack.version}
+          onChange={(event) => {
+            const selected = packs.find((option) => option.version === event.target.value);
+            if (selected) setPack(selected);
+          }}
+        >
+          {packs.map((option) => (
+            <option key={option.version} value={option.version}>
+              {option.label} ({option.version})
+            </option>
+          ))}
+        </select>
+        <p className="mb-5 mt-2 text-sm text-slate-700">
+          เลือกชุดแล้วเลือกไฟล์เพื่อเริ่มรอบใหม่ รายงานเดิมใช้ชุดที่ระบุในรายงาน
+          {pack.facility && ' · ใช้กับข้อมูลทดสอบเท่านั้น เช่น PERSON.HOSPCODE9 ค่า TEST-A'}
+        </p>
         <label htmlFor="txt-files" className="block text-lg font-semibold">
           เลือกไฟล์ TXT หรือ ZIP
         </label>
