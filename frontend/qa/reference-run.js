@@ -4,29 +4,32 @@ async function verifyReferenceRun(page) {
   const pack = page.getByLabel('ชุดอ้างอิงสำหรับรอบถัดไป');
   const input = page.getByLabel('เลือกไฟล์ TXT หรือ ZIP');
   const file = {
-    name: 'PERSON.TXT',
+    name: 'pErSoN.tXt',
     mimeType: 'text/plain',
     buffer: Buffer.from('PID|HOSPCODE9\nprivate-fixture-id|TEST-A'),
   };
-  async function readStorage() {
-    const originState = await page.context().storageState({ indexedDB: true });
-    const browserStorage = await page.evaluate(async () => {
-      const cachedRequests = [];
-      const cacheNames = (await caches.keys()).sort();
-      for (const name of cacheNames) {
+  async function assertPrivateDataAbsent() {
+    const markers = ['private-fixture-id', file.name];
+    const originState = JSON.stringify(await page.context().storageState({ indexedDB: true }));
+    if (markers.some((marker) => originState.includes(marker)))
+      throw new Error('Input persisted in browser storage');
+    await page.evaluate(async (markers) => {
+      function check(text) {
+        if (markers.some((marker) => text.includes(marker)))
+          throw new Error('Input persisted in session or cache');
+      }
+      check(JSON.stringify({ ...sessionStorage }));
+      for (const name of await caches.keys()) {
+        check(name);
         const cache = await caches.open(name);
         for (const request of await cache.keys()) {
-          cachedRequests.push([name, request.url]);
+          check(request.url);
           const response = await cache.match(request);
-          if ((await response.text()).includes('private-fixture-id'))
-            throw new Error('Patient identifier in cached response');
+          check(await response.text());
         }
       }
-      return { session: { ...sessionStorage }, cacheNames, cachedRequests };
-    });
-    return JSON.stringify({ originState, browserStorage });
+    }, markers);
   }
-  const before = await readStorage();
   let requests = 0;
   const blockRequest = (route) => {
     requests++;
@@ -49,6 +52,7 @@ async function verifyReferenceRun(page) {
         await input.setInputFiles(file);
         await page.getByText(new RegExp('ชุดที่ใช้ตรวจ.*' + version)).waitFor();
         await page.getByText(expected).waitFor();
+        await assertPrivateDataAbsent();
         previousVersion = version;
       }
       await page.getByText('บัญชีกฎและหลักฐานรายแฟ้ม', { exact: true }).click();
@@ -62,11 +66,8 @@ async function verifyReferenceRun(page) {
       }
       if (await page.getByText(/private-fixture-id/).count()) throw new Error('Record value shown');
     }
-    const after = await readStorage();
-    if (requests || before !== after || after.includes('private-fixture-id')) {
-      throw new Error('File selection made a request or changed browser storage');
-    }
-    return 'PASS · 3 versions · 2 viewports · no requests or storage changes during inspection';
+    if (requests) throw new Error('Unexpected network request during inspection');
+    return 'PASS · 3 versions · 2 viewports · no requests or input markers in browser storage';
   } finally {
     await page.unroute('**/*', blockRequest);
   }
