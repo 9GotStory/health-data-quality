@@ -12,6 +12,7 @@ type Evidence = {
 export type ManifestRule = {
   file: string;
   id: string;
+  field?: string;
   appliesTo: string;
   dependency: string;
   evidence: Evidence[];
@@ -41,7 +42,7 @@ export function ruleManifest({ schema, facility }: ReferencePack): ManifestRule[
         appliesTo: 'ชื่อคอลัมน์',
         dependency: 'ชื่อฟิลด์จากหลักฐานที่ยืนยันได้',
         status: 'unavailable',
-        reason: `คู่มือเว้นชื่อคอลัมน์ตำแหน่งที่ ${position}`,
+        reason: `ตำแหน่งที่ ${position} · คู่มือไม่ระบุชื่อคอลัมน์ กฎที่ต้องใช้ชื่อนี้จึงตรวจไม่ได้`,
       });
     }
     if (file.checksRequiredHospcode9) {
@@ -57,6 +58,7 @@ export function ruleManifest({ schema, facility }: ReferencePack): ManifestRule[
       rules.push({
         ...common,
         id: 'FACILITY-LOOKUP',
+        field: file.facilityLookupField,
         appliesTo: facility ? 'HOSPCODE9 เทียบเฉพาะรายการสังเคราะห์' : 'HOSPCODE9',
         dependency: 'คอลัมน์ที่ผูกได้ มีค่า และมีชุดรหัสของรุ่นที่เลือก',
         evidence: facility ? [{ source: facility.source, sha256: facility.sha256 }] : [manual],
@@ -72,6 +74,7 @@ export function ruleManifest({ schema, facility }: ReferencePack): ManifestRule[
       rules.push({
         ...common,
         id: 'ICF-ALIAS',
+        field: 'DATE_SERRV',
         appliesTo: 'การผูกคอลัมน์วันที่รับบริการด้วยชื่ออื่น',
         dependency: 'ตารางหรือประกาศทางการที่ยืนยันชื่ออื่นสำหรับคู่มือฉบับนี้',
         status: 'unavailable',
@@ -82,6 +85,7 @@ export function ruleManifest({ schema, facility }: ReferencePack): ManifestRule[
       rules.push({
         ...common,
         id: 'COD-001',
+        field: 'DIAGTYPE',
         appliesTo: 'DIAGTYPE เฉพาะผู้ป่วยนอก',
         evidence: [
           {
@@ -104,6 +108,7 @@ export function ruleManifest({ schema, facility }: ReferencePack): ManifestRule[
       rules.push({
         ...common,
         id: 'PROVIDER-COUNCIL',
+        field: 'COUNCIL',
         appliesTo: 'COUNCIL ตามประกาศปรับรหัสสภาวิชาชีพ',
         evidence: [
           manual,

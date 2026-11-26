@@ -170,3 +170,19 @@ it.each([
   });
   expect(await screen.findByText(new RegExp('FACILITY-LOOKUP.*ตรวจไม่ได้.*' + reason))).toBeVisible();
 });
+
+it('filters inspection findings while keeping all 43 file statuses and the export available', async () => {
+  render(<App />);
+  const file = new File(['PID|HOSPCODE9\nPRIVATE-NAME|\n1234567890123| '], 'PERSON.TXT');
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP'), { target: { files: [file] } });
+  const filter = await screen.findByLabelText('กรองผลตรวจ');
+  fireEvent.change(filter, { target: { value: 'error' } });
+  expect(screen.getByText(/บรรทัด 2.*PER-REQUIRED.*HOSPCODE9/)).toBeVisible();
+  expect(screen.queryByText(/บรรทัด 3.*IO-09/)).not.toBeInTheDocument();
+  expect(screen.getByRole('list', { name: 'สถานะการส่ง 43 แฟ้มหลัก' }).children).toHaveLength(43);
+  expect(screen.getByRole('button', { name: 'ดาวน์โหลด CSV' })).toBeEnabled();
+  fireEvent.change(filter, { target: { value: 'review' } });
+  expect(screen.getByText(/บรรทัด 3.*IO-09/)).toBeVisible();
+  expect(screen.queryByText(/บรรทัด 2.*PER-REQUIRED/)).not.toBeInTheDocument();
+  expect(document.body).not.toHaveTextContent(/PRIVATE-NAME|1234567890123/);
+});
