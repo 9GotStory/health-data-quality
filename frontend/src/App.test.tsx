@@ -141,10 +141,10 @@ it('keeps the reported pack and lookup until the user submits the same TXT for a
   fireEvent.change(select, { target: { value: 'fixture-1' } });
   run();
   expect(await screen.findByText('ชุดที่ใช้ตรวจ · ชุดทดสอบสังเคราะห์ 1 (fixture-1)')).toBeVisible();
-  expect(screen.getByText(/บรรทัด 2.*พบในชุดรหัสสังเคราะห์/)).toBeVisible();
+  expect(screen.getByText(/บรรทัด 2.*· พบในชุดรหัสสังเคราะห์/)).toBeVisible();
   fireEvent.change(select, { target: { value: 'fixture-2' } });
   expect(screen.getByText(/ชุดที่ใช้ตรวจ.*fixture-1/)).toBeVisible();
-  expect(screen.getByText(/บรรทัด 2.*พบในชุดรหัสสังเคราะห์/)).toBeVisible();
+  expect(screen.getByText(/บรรทัด 2.*· พบในชุดรหัสสังเคราะห์/)).toBeVisible();
   run();
   expect(await screen.findByText(/ชุดที่ใช้ตรวจ.*fixture-2/)).toBeVisible();
   expect(screen.getByText(/บรรทัด 2.*ไม่พบในชุดรหัสสังเคราะห์/)).toBeVisible();
@@ -155,4 +155,18 @@ it('keeps the reported pack and lookup until the user submits the same TXT for a
   expect(screen.getByText(/บรรทัด 2.*ตรวจไม่ได้.*ขาดชุดรหัส/)).toBeVisible();
   expect(screen.getByText(/ยังไม่ทราบจำนวนกฎทั้งหมด/)).toBeVisible();
   expect(screen.queryByText(/secret-id/)).not.toBeInTheDocument();
+});
+
+it.each([
+  ['PID', 'ขาดคอลัมน์'],
+  ['HOSPCODE9|HOSPCODE9', 'ชื่อคอลัมน์ซ้ำ'],
+])('explains why a ready fixture lookup cannot run with the header %s', async (header, reason) => {
+  render(<App />);
+  fireEvent.change(screen.getByLabelText('ชุดอ้างอิงสำหรับรอบถัดไป'), {
+    target: { value: 'fixture-1' },
+  });
+  fireEvent.change(screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP'), {
+    target: { files: [new File([header], 'PERSON.TXT')] },
+  });
+  expect(await screen.findByText(new RegExp('FACILITY-LOOKUP.*ตรวจไม่ได้.*' + reason))).toBeVisible();
 });

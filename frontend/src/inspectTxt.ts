@@ -80,6 +80,9 @@ export async function inspectTxt(
   const names = header.split('|');
   const { bindings, ...columnReport } = inspectColumns(names, reference);
   const hospcode9Index = reference.checksRequiredHospcode9 ? bindings.indexOf('HOSPCODE9') : -1;
+  const lookupIndex = reference.facilityLookupField
+    ? bindings.indexOf(reference.facilityLookupField)
+    : -1;
   const rows = lines.map((record, index) => {
     const line = index + 2;
     if (record === '') return { line, status: 'blank' as const };
@@ -92,10 +95,11 @@ export async function inspectTxt(
     );
     const hospcode9 = requiredValueStatus(fields[hospcode9Index]);
     let facilityLookup;
-    if (reference.checksRequiredHospcode9 && hospcode9 === 'present') {
+    const lookupValue = fields[lookupIndex];
+    if (requiredValueStatus(lookupValue) === 'present') {
       if (!facility) facilityLookup = 'missing-reference' as const;
       else
-        facilityLookup = facility.codes.includes(fields[hospcode9Index])
+        facilityLookup = facility.codes.includes(lookupValue)
           ? ('found' as const)
           : ('not-found' as const);
     }

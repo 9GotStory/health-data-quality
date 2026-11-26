@@ -90,6 +90,7 @@ function TxtResult({ report }: { report: Report }) {
       </>
     );
   }
+  const lookupField = report.reference.facilityLookupField;
   const readable = report.rows.filter((row) => row.status === 'readable').length;
   return (
     <>
@@ -97,6 +98,12 @@ function TxtResult({ report }: { report: Report }) {
       <HeaderResult report={report} />
       {report.reference.checksRequiredHospcode9 && report.missing.includes('HOSPCODE9') && (
         <p>PER-REQUIRED · ตรวจไม่ได้ทุกแถว เพราะขาดคอลัมน์ HOSPCODE9</p>
+      )}
+      {lookupField && report.missing.includes(lookupField) && (
+        <p>FACILITY-LOOKUP · ตรวจไม่ได้ทุกแถว เพราะขาดคอลัมน์ {lookupField}</p>
+      )}
+      {lookupField && report.duplicates.some(({ field }) => field === lookupField) && (
+        <p>FACILITY-LOOKUP · ตรวจไม่ได้ทุกแถว เพราะชื่อคอลัมน์ซ้ำ {lookupField}</p>
       )}
       <h3 className="mt-5 font-semibold">ผลการอ่าน TXT ตามนโยบายเครื่องมือ Q20</h3>
       <p>อ่านไฟล์ด้วย UTF-8 ได้ · หัวตารางมี {report.expectedWidth} ช่อง</p>
@@ -148,8 +155,11 @@ function FileDetails({ report, fixture }: { report: Report; fixture: boolean }) 
       {reference.unknownPositions.map((position) => (
         <p key={position}>ตำแหน่งที่ {position} · คู่มือไม่ระบุชื่อคอลัมน์ กฎที่ต้องใช้ชื่อนี้จึงตรวจไม่ได้</p>
       ))}
-      {reference.checksRequiredHospcode9 && fixture ? (
-        <p>ตรวจค่าว่างของ HOSPCODE9 และเทียบรหัสกับชุดสังเคราะห์ที่เลือก</p>
+      {reference.facilityLookupField && fixture ? (
+        <p>
+          กฎรายแถวของชุดทดสอบครอบคลุมเฉพาะค่าว่างของ HOSPCODE9 และการเทียบรหัสสังเคราะห์เมื่อผูกคอลัมน์ได้
+          กฎความหมายอื่นยังตรวจไม่ได้
+        </p>
       ) : reference.checksRequiredHospcode9 ? (
         <p>
           ยังไม่พร้อมตรวจความหมายของข้อมูลรายแถวนอกเหนือจากการตรวจค่าว่างของ HOSPCODE9 ตาม PER-REQUIRED ·

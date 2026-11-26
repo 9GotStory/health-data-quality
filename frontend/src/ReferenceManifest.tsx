@@ -16,6 +16,9 @@ export function ReferenceManifest({ report }: { report: SelectionReport }) {
       <p>ยังไม่ทราบจำนวนกฎทั้งหมดของแต่ละแฟ้ม ความครอบคลุมของกฎแสดงเฉพาะรายการที่มีในชุดนี้</p>
       <details className="rounded border border-slate-200 p-3">
         <summary className="cursor-pointer font-semibold">บัญชีกฎและหลักฐานรายแฟ้ม</summary>
+        <p className="mt-2 text-sm">
+          สถานะในบัญชีแสดงความพร้อมของชุดอ้างอิง ผลตรวจไฟล์ที่เลือกอยู่ในรายละเอียดแต่ละแฟ้ม
+        </p>
         <label className="mt-3 block">
           แฟ้มในบัญชีกฎ
           <select
@@ -35,7 +38,7 @@ export function ReferenceManifest({ report }: { report: SelectionReport }) {
                 {rule.id} · {rule.status === 'ready' ? 'พร้อมตรวจ' : 'ตรวจไม่ได้'}
               </p>
               <p>
-                {rule.appliesTo} · ต้องใช้{rule.dependency}
+                {rule.appliesTo} · เงื่อนไข · {rule.dependency}
               </p>
               {rule.status === 'unavailable' && <p>{rule.reason}</p>}
               {rule.evidence.map((item) => (
@@ -47,6 +50,9 @@ export function ReferenceManifest({ report }: { report: SelectionReport }) {
                   ) : (
                     item.source
                   )}
+                  {item.publication && ` · วันที่หนังสือ ${item.publication}`}
+                  {item.applicabilityDate && ` · ${item.applicabilityDate}`}
+                  {item.retrievedOn && ` · สืบค้น ${item.retrievedOn}`}
                   {' · SHA-256 '}
                   <code className="break-all">{item.sha256}</code>
                 </p>

@@ -1,6 +1,13 @@
 import type { ReferencePack } from './referencePacks';
 
-type Evidence = { source: string; sha256: string; url?: string };
+type Evidence = {
+  source: string;
+  sha256: string;
+  url?: string;
+  retrievedOn?: string;
+  publication?: string;
+  applicabilityDate?: string;
+};
 
 export type ManifestRule = {
   file: string;
@@ -13,7 +20,12 @@ export type ManifestRule = {
 export function ruleManifest({ schema, facility }: ReferencePack): ManifestRule[] {
   const rules: ManifestRule[] = [];
   for (const file of schema.files) {
-    const manual = { source: file.source, url: file.url, sha256: schema.sha256 };
+    const manual = {
+      source: file.source,
+      url: file.url,
+      sha256: schema.sha256,
+      retrievedOn: '2026-11-22',
+    };
     const common = { file: file.name, evidence: [manual] };
     rules.push({
       ...common,
@@ -33,28 +45,38 @@ export function ruleManifest({ schema, facility }: ReferencePack): ManifestRule[
       });
     }
     if (file.checksRequiredHospcode9) {
-      rules.push(
-        {
-          ...common,
-          id: 'PER-REQUIRED',
-          appliesTo: 'HOSPCODE9 ของแถวที่อ่านได้',
-          dependency: 'ผูกคอลัมน์ HOSPCODE9 ได้เพียงตำแหน่งเดียว',
-          status: 'ready',
-        },
-        {
-          ...common,
-          id: 'FACILITY-LOOKUP',
-          appliesTo: facility ? 'HOSPCODE9 เทียบเฉพาะรายการสังเคราะห์' : 'HOSPCODE9',
-          dependency: 'คอลัมน์ที่ผูกได้ มีค่า และมีชุดรหัสของรุ่นที่เลือก',
-          evidence: facility ? [{ source: facility.source, sha256: facility.sha256 }] : [manual],
-          ...(facility
-            ? { status: 'ready' as const }
-            : {
-                status: 'unavailable' as const,
-                reason: 'ขาดชุดรหัสหน่วยบริการที่ยืนยันรุ่นและขอบเขตการใช้',
-              }),
-        },
-      );
+      rules.push({
+        ...common,
+        id: 'PER-REQUIRED',
+        appliesTo: 'HOSPCODE9 ของแถวที่อ่านได้',
+        dependency: 'ผูกคอลัมน์ HOSPCODE9 ได้เพียงตำแหน่งเดียว',
+        status: 'ready',
+      });
+    }
+    if (file.facilityLookupField) {
+      rules.push({
+        ...common,
+        id: 'FACILITY-LOOKUP',
+        appliesTo: facility ? 'HOSPCODE9 เทียบเฉพาะรายการสังเคราะห์' : 'HOSPCODE9',
+        dependency: 'คอลัมน์ที่ผูกได้ มีค่า และมีชุดรหัสของรุ่นที่เลือก',
+        evidence: facility ? [{ source: facility.source, sha256: facility.sha256 }] : [manual],
+        ...(facility
+          ? { status: 'ready' as const }
+          : {
+              status: 'unavailable' as const,
+              reason: 'ขาดชุดรหัสหน่วยบริการที่ยืนยันรุ่นและขอบเขตการใช้',
+            }),
+      });
+    }
+    if (file.name === 'ICF') {
+      rules.push({
+        ...common,
+        id: 'ICF-ALIAS',
+        appliesTo: 'การผูกคอลัมน์วันที่รับบริการด้วยชื่ออื่น',
+        dependency: 'ตารางหรือประกาศทางการที่ยืนยันชื่ออื่นสำหรับคู่มือฉบับนี้',
+        status: 'unavailable',
+        reason: 'คู่มือใช้ DATE_SERRV และยังไม่มีหลักฐานยืนยันชื่ออื่นที่ใช้แทนได้',
+      });
     }
     if (file.name === 'DIAGNOSIS_OPD') {
       rules.push({
@@ -62,9 +84,14 @@ export function ruleManifest({ schema, facility }: ReferencePack): ManifestRule[
         id: 'COD-001',
         appliesTo: 'DIAGTYPE เฉพาะผู้ป่วยนอก',
         evidence: [
-          manual,
           {
-            source: 'ทะเบียน hdata 85,139 · รหัสประเภทการวินิจฉัย OPD/IPD',
+            ...manual,
+            applicabilityDate: 'คู่มือหน้า 47 ระบุยกเลิกรหัส 2 และ 3 เมื่อ 28 เมษายน 2568 เฉพาะ OPD',
+          },
+          {
+            retrievedOn: '2026-11-23',
+            source: 'ทะเบียน hdata 85,139 · รหัสประเภทการวินิจฉัย OPD/IPD · Sheet1!A4:B5',
+            url: 'https://drive.google.com/file/d/1o7QU9sNAacfRPpKsG0S1zgVhLOLLdsTk/view',
             sha256: '5eaaeb57520f94294b412a00cb6e6f4fd7f55333de6a3bc7c9576ced2679bb6e',
           },
         ],
@@ -81,7 +108,9 @@ export function ruleManifest({ schema, facility }: ReferencePack): ManifestRule[
         evidence: [
           manual,
           {
-            source: 'หนังสือปรับรหัสสภาวิชาชีพ 4 พฤศจิกายน 2568 หน้า 1',
+            source: 'หนังสือปรับรหัสสภาวิชาชีพ หน้า 1',
+            publication: '4 พฤศจิกายน 2568',
+            retrievedOn: '2026-11-22',
             url: 'https://hdata.moph.go.th/site/wp-content/uploads/2025/11/แจ้งปรับปรุงรหัส-Provider_041168.pdf',
             sha256: 'f3ad679a59fe69b88227af60bae394fb447d0d697825362b4da15b58aaaa3e70',
           },

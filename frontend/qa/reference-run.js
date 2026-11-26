@@ -8,6 +8,24 @@ async function verifyReferenceRun(page) {
     mimeType: 'text/plain',
     buffer: Buffer.from('PID|HOSPCODE9\nprivate-fixture-id|TEST-A'),
   };
+  async function readStorage() {
+    const originState = await page.context().storageState({ indexedDB: true });
+    const { session, cachedRequests, cachedPatientData } = await page.evaluate(async () => {
+      const cachedRequests = [];
+      let cachedPatientData = false;
+      for (const name of await caches.keys()) {
+        const cache = await caches.open(name);
+        for (const request of await cache.keys()) {
+          cachedRequests.push([name, request.url]);
+          const response = await cache.match(request);
+          if ((await response.text()).includes('private-fixture-id')) cachedPatientData = true;
+        }
+      }
+      return { session: { ...sessionStorage }, cachedRequests, cachedPatientData };
+    });
+    return JSON.stringify({ originState, session, cachedRequests, cachedPatientData });
+  }
+  const before = await readStorage();
   let requests = 0;
   const blockRequest = (route) => {
     requests++;
@@ -43,15 +61,11 @@ async function verifyReferenceRun(page) {
       }
       if (await page.getByText(/private-fixture-id/).count()) throw new Error('Record value shown');
     }
-    const storage = await page.evaluate(async () => [
-      localStorage.length,
-      sessionStorage.length,
-      (await indexedDB.databases()).length,
-      (await caches.keys()).length,
-    ]);
-    if (requests || storage.some(Boolean))
-      throw new Error('Unexpected requests or persistent data');
-    return 'PASS · 3 versions · 2 viewports · no requests or stored data';
+    const after = await readStorage();
+    if (requests || before !== after || after.includes('private-fixture-id')) {
+      throw new Error('File selection made a request or changed browser storage');
+    }
+    return 'PASS · 3 versions · 2 viewports · no requests or storage changes during inspection';
   } finally {
     await page.unroute('**/*', blockRequest);
   }

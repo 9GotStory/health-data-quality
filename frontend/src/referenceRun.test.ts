@@ -44,6 +44,11 @@ it('reports the scope and evidence for ready checks and blocked rules even on a 
         reason: expect.stringContaining('วันมีผล'),
       }),
       expect.objectContaining({
+        file: 'ICF',
+        status: 'unavailable',
+        reason: expect.stringContaining('DATE_SERRV'),
+      }),
+      expect.objectContaining({
         file: 'SERVICE',
         status: 'unavailable',
         reason: expect.stringContaining('ตำแหน่งที่ 2'),
