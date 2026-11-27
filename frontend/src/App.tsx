@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { inspectSelection, SelectionError, type SelectionReport } from './inspectSelection';
 import { referencePacks, type ReferencePack } from './referencePacks';
 import { CoverageResult } from './CoverageResult';
+import { OfflinePreparation } from './OfflinePreparation';
 
 type Selection =
   | { status: 'idle' | 'reading' | 'cancelled' }
@@ -58,6 +59,7 @@ export function App() {
         </p>
       </header>
       <section className="rounded-xl border border-slate-200 bg-white p-5 sm:p-7">
+        {import.meta.env.PROD && <OfflinePreparation />}
         <label htmlFor="reference-pack" className="block text-lg font-semibold">
           ชุดอ้างอิงสำหรับรอบถัดไป
         </label>
