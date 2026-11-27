@@ -25,12 +25,13 @@ const invalidEntry: TransportProblem = {
 };
 
 // For duplicates and supplements, verify the transport without decoding or retaining TXT rows.
-async function inspectEntryOnly(file: Input): Promise<EntryDetail> {
+async function inspectEntryOnly(file: Input, signal?: AbortSignal): Promise<EntryDetail> {
   if ('problem' in file) return file;
   try {
     await file.verifyIntegrity?.();
     return { name: file.name };
   } catch {
+    signal?.throwIfAborted();
     return { name: file.name, problem: invalidEntry };
   }
 }
@@ -50,15 +51,16 @@ function zipEntryProblem(entry: Entry): TransportProblem | undefined {
     return { rule: 'IO-15', reason: 'ไม่รองรับวิธีบีบอัดของรายการนี้' };
 }
 
-async function inspectFiles(files: Input[], pack: ReferencePack) {
+async function inspectFiles(files: Input[], pack: ReferencePack, signal?: AbortSignal) {
   const fileReferences = pack.schema.files;
   const outside: EntryDetail[] = [];
   const byName = new Map<string, Input[]>();
   for (const file of files) {
+    signal?.throwIfAborted();
     const basename = file.name.split(/[\\/]/).pop() ?? file.name;
     const name = basename.slice(0, -4).toUpperCase();
     if (!/\.txt$/i.test(basename) || !fileReferences.some((reference) => reference.name === name)) {
-      outside.push(await inspectEntryOnly(file));
+      outside.push(await inspectEntryOnly(file, signal));
       continue;
     }
     const group = byName.get(name) ?? [];
@@ -68,18 +70,22 @@ async function inspectFiles(files: Input[], pack: ReferencePack) {
 
   const coverage = [];
   for (const reference of fileReferences) {
+    signal?.throwIfAborted();
     const group = byName.get(reference.name);
     if (!group) {
       coverage.push({ name: reference.name, status: 'absent' as const });
     } else if (group.length > 1) {
       const members = [];
-      for (const member of group) members.push(await inspectEntryOnly(member));
+      for (const member of group) {
+        signal?.throwIfAborted();
+        members.push(await inspectEntryOnly(member, signal));
+      }
       coverage.push({ name: reference.name, status: 'duplicate' as const, members });
     } else if ('problem' in group[0]) {
       const { name: fileName, problem } = group[0];
       coverage.push({ name: reference.name, status: 'unavailable' as const, fileName, problem });
     } else {
-      const report = await inspectTxt(group[0], reference, pack.facility);
+      const report = await inspectTxt(group[0], reference, pack.facility, signal);
       if (
         group[0].verifyIntegrity &&
         report.status === 'unreadable' &&
@@ -96,11 +102,13 @@ async function inspectFiles(files: Input[], pack: ReferencePack) {
       }
     }
   }
+  signal?.throwIfAborted();
   return { pack, manifest: ruleManifest(pack), coverage, outside, submitted: byName.size };
 }
 
-async function inspectZip(file: File, pack: ReferencePack) {
+async function inspectZip(file: File, pack: ReferencePack, signal?: AbortSignal) {
   const reader = new ZipReader(new BlobReader(file), {
+    signal,
     useWebWorkers: false,
     checkSignature: true,
     checkLocalFilename: true,
@@ -108,8 +116,10 @@ async function inspectZip(file: File, pack: ReferencePack) {
   try {
     // Keep the original names so an unsafe entry can be reported without opening it.
     const entries = await reader.getEntries({ filenameValidation: 'tolerant' }).catch(() => {
+      signal?.throwIfAborted();
       throw new SelectionError(invalidDirectory);
     });
+    signal?.throwIfAborted();
     if (
       reader.warnings?.some(({ reason }) =>
         [
@@ -136,17 +146,23 @@ async function inspectZip(file: File, pack: ReferencePack) {
           },
         });
     }
-    return await inspectFiles(inputs, pack);
+    return await inspectFiles(inputs, pack, signal);
   } finally {
     await reader.close();
   }
 }
 
-export function inspectSelection(files: File[], pack: ReferencePack = referencePacks['schema-1']) {
-  if (files.length === 1 && /\.zip$/i.test(files[0].name)) return inspectZip(files[0], pack);
+export function inspectSelection(
+  files: File[],
+  pack: ReferencePack = referencePacks['schema-1'],
+  signal?: AbortSignal,
+) {
+  signal?.throwIfAborted();
+  if (files.length === 1 && /\.zip$/i.test(files[0].name))
+    return inspectZip(files[0], pack, signal);
   if (files.some((file) => !/\.txt$/i.test(file.name)))
     throw new SelectionError('IO-01 · โปรดเลือก ZIP หนึ่งไฟล์ หรือ TXT จากชุดส่งออกเดียวกัน');
-  return inspectFiles(files, pack);
+  return inspectFiles(files, pack, signal);
 }
 
 export type SelectionReport = Awaited<ReturnType<typeof inspectFiles>>;

@@ -50,3 +50,8 @@ with ZipFile(restricted) as archive:
 pack_into("<H", data, local + 6, 1)
 pack_into("<H", data, central + 8, 1)
 restricted.write_bytes(data)
+
+
+# A multi-megabyte expanded payload for cancelling an in-flight inspection.
+with ZipFile(fixtures / "cancel-round.zip", "w") as archive:
+    add(archive, "PERSON.TXT", "PID|HOSPCODE9\n" + "CANCELLED-SYNTHETIC-ROW|TEST-A\n" * 131072, ZIP_DEFLATED)

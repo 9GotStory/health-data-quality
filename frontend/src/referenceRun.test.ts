@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { inspectSelection } from './inspectSelection';
 import { referencePacks } from './referencePacks';
@@ -55,4 +56,42 @@ it('reports the scope and evidence for ready checks and blocked rules even on a 
       }),
     ]),
   );
+});
+
+it('IT-34 cancels a large synthetic ZIP while a small new selection returns its own coverage', async () => {
+  const bytes = readFileSync(new URL('../qa/fixtures/zip/cancel-round.zip', import.meta.url));
+  const archive = new File([Uint8Array.from(bytes)], 'cancel-round.zip');
+  const round = new AbortController();
+  const oldReport = inspectSelection([archive], referencePacks['fixture-1'], round.signal);
+  round.abort();
+  const [old, current] = await Promise.allSettled([
+    oldReport,
+    inspectSelection([new File(['HID\nNEW-HOME'], 'HOME.TXT')], referencePacks['fixture-2']),
+  ]);
+  expect(old).toMatchObject({ status: 'rejected', reason: { name: 'AbortError' } });
+  expect(current).toMatchObject({
+    status: 'fulfilled',
+    value: {
+      submitted: 1,
+      pack: { version: 'fixture-2' },
+      coverage: expect.arrayContaining([
+        { name: 'PERSON', status: 'absent' },
+        expect.objectContaining({ name: 'HOME', status: 'submitted' }),
+      ]),
+    },
+  });
+});
+
+it('IT-34 accepts cancellation during row checks after the TXT bytes have arrived', async () => {
+  const round = new AbortController();
+  const file = new File(['PID|HOSPCODE9\n' + 'ROW|TEST-A\n'.repeat(65536)], 'PERSON.TXT');
+  const readBytes = file.arrayBuffer.bind(file);
+  file.arrayBuffer = async () => {
+    const bytes = await readBytes();
+    setTimeout(() => round.abort(), 0);
+    return bytes;
+  };
+  await expect(
+    inspectSelection([file], referencePacks['fixture-1'], round.signal).then(() => 'completed'),
+  ).rejects.toMatchObject({ name: 'AbortError' });
 });

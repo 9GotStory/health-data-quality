@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import complete from '../qa/fixtures/complete/PERSON.TXT?raw';
 import App from './App';
@@ -196,4 +196,33 @@ it('shows readable line positions and exposes original paths only when asked', a
   expect(document.body).not.toHaveTextContent(/PRIVATE-NAME|1234567890123/);
   fireEvent.click(screen.getByLabelText('แสดงชื่อไฟล์และเส้นทางต้นฉบับบนหน้าจอ'));
   expect(screen.getByText(/ไฟล์ที่เลือก.*PRIVATE-NAME-1234567890123\/HOME.TXT/)).toBeVisible();
+});
+
+it('IT-34 can reselect the same TXT and keeps the new report when the cancelled read finishes', async () => {
+  render(<App />);
+  const input = screen.getByLabelText('เลือกไฟล์ TXT หรือ ZIP');
+  const file = new File(['HOSPCODE9\nTEST-A'], 'PERSON.TXT');
+  let finishRead!: (bytes: ArrayBuffer) => void;
+  vi.spyOn(file, 'arrayBuffer').mockReturnValueOnce(
+    new Promise((resolve) => {
+      finishRead = resolve;
+    }),
+  );
+  const select = () => fireEvent.change(input, { target: { files: [file] } });
+
+  select();
+  fireEvent.click(screen.getByRole('button', { name: 'ยกเลิกรอบตรวจ' }));
+  expect(screen.getByText(/ยกเลิกรอบตรวจแล้ว.*ตรวจไม่ครบ/)).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'ดาวน์โหลด CSV' })).not.toBeInTheDocument();
+  expect(input).toBeEnabled();
+
+  fireEvent.change(screen.getByLabelText('ชุดอ้างอิงสำหรับรอบถัดไป'), {
+    target: { value: 'fixture-1' },
+  });
+  select();
+  await screen.findByText(/บรรทัด 2.*· พบในชุดรหัสสังเคราะห์/);
+  await act(async () => finishRead(new TextEncoder().encode('PID\nold-id').buffer));
+  expect(screen.getByText(/ชุดที่ใช้ตรวจ.*fixture-1/)).toBeVisible();
+  expect(screen.getByText(/บรรทัด 2.*· พบในชุดรหัสสังเคราะห์/)).toBeVisible();
+  expect(screen.queryByText(/ยกเลิกรอบตรวจแล้ว/)).not.toBeInTheDocument();
 });

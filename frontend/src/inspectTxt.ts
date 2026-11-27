@@ -52,11 +52,13 @@ export async function inspectTxt(
   file: Pick<File, 'name' | 'arrayBuffer'>,
   reference: FileReference,
   facility: ReferencePack['facility'] = null,
+  signal?: AbortSignal,
 ) {
   let bytes: ArrayBuffer;
   try {
     bytes = await file.arrayBuffer();
   } catch {
+    signal?.throwIfAborted();
     return {
       fileName: file.name,
       reference,
@@ -64,6 +66,7 @@ export async function inspectTxt(
       reason: 'read-failed' as const,
     };
   }
+  signal?.throwIfAborted();
   const base = { fileName: file.name, reference };
   let text: string;
   try {
@@ -83,8 +86,7 @@ export async function inspectTxt(
   const lookupIndex = reference.facilityLookupField
     ? bindings.indexOf(reference.facilityLookupField)
     : -1;
-  const rows = lines.map((record, index) => {
-    const line = index + 2;
+  function inspectRow(record: string, line: number) {
     if (record === '') return { line, status: 'blank' as const };
     const fields = record.split('|');
     if (fields.length !== names.length) {
@@ -110,7 +112,16 @@ export async function inspectTxt(
       hospcode9,
       facilityLookup,
     };
-  });
+  }
+  const rows = [];
+  for (const [index, record] of lines.entries()) {
+    if (signal && index > 0 && index % 1024 === 0) {
+      // Let the browser dispatch input events during a long synchronous row scan.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      signal.throwIfAborted();
+    }
+    rows.push(inspectRow(record, index + 2));
+  }
   return {
     ...base,
     status: 'checked' as const,
