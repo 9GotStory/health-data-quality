@@ -25,7 +25,9 @@ async function prepare() {
   await cache.addAll(requests);
 }
 
-self.addEventListener('install', (event) => event.waitUntil(prepare()));
+self.addEventListener('install', (event) => {
+  event.waitUntil(prepare().then(() => self.skipWaiting()));
+});
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
@@ -62,7 +64,9 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
-  const navigation = request.mode === 'navigate' && [scope, indexUrl].includes(request.url);
+  const target = new URL(request.url);
+  const navigation =
+    request.mode === 'navigate' && [scope, indexUrl].includes(target.origin + target.pathname);
   if (!navigation && !urls.has(request.url)) return;
   event.respondWith(
     (async () => {

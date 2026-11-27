@@ -18,7 +18,12 @@ async function prepareOffline() {
   const registration = await navigator.serviceWorker.register(
     import.meta.env.BASE_URL + 'offline-worker.js',
   );
-  const worker = registration.active ?? registration.installing ?? registration.waiting;
+  if (registration.active) {
+    if (await checkPack(registration.active, 'prepare')) return true;
+    // The page may have loaded a newer release while repairing an evicted bundle.
+    await registration.update();
+  }
+  const worker = registration.installing ?? registration.waiting ?? registration.active;
   if (!worker) return false;
   if (worker.state !== 'activated') {
     await new Promise<void>((resolve, reject) => {

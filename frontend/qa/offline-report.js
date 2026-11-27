@@ -30,14 +30,8 @@ async function verifyOfflineReport(page) {
       throw new Error('Found private fixture data');
   }
 
-  async function verifyStorage(tab, allowed) {
-    const state = await context.storageState({ indexedDB: true });
-    if (
-      state.cookies.length ||
-      state.origins.some((origin) => origin.localStorage.length || origin.indexedDB?.length)
-    )
-      throw new Error('Unexpected persistent origin data');
-    const entries = await tab.evaluate(async () => {
+  function cacheEntries(tab) {
+    return tab.evaluate(async () => {
       if (sessionStorage.length) throw new Error('Unexpected session data');
       const values = [];
       for (const name of await caches.keys()) {
@@ -54,7 +48,20 @@ async function verifyOfflineReport(page) {
       }
       return values;
     });
-    if (entries.length !== allowed.length || entries.some((entry) => !allowed.includes(entry.url)))
+  }
+
+  async function verifyStorage(tab, allowed) {
+    const state = await context.storageState({ indexedDB: true });
+    if (
+      state.cookies.length ||
+      state.origins.some((origin) => origin.localStorage.length || origin.indexedDB?.length)
+    )
+      throw new Error('Unexpected persistent origin data');
+    const entries = await cacheEntries(tab);
+    if (
+      entries.length !== allowed.size ||
+      entries.some((entry) => allowed.get(entry.url) !== entry.body)
+    )
       throw new Error('Cache contains something other than the prepared static app');
     assertPrivate(JSON.stringify(entries));
   }
@@ -73,12 +80,34 @@ async function verifyOfflineReport(page) {
   try {
     const first = await context.newPage();
     await first.goto(url, { waitUntil: 'networkidle' });
-    const assets = await first.evaluate(() => [
-      new URL('index.html', document.baseURI).href,
-      document.querySelector('script[type=module]').src,
-      document.querySelector('link[rel=stylesheet]').href,
-    ]);
+    // Observe a clean preparation to inventory this build independently of any inspection.
+    const clean = await page.context().browser().newContext();
+    let assets;
+    try {
+      const tab = await clean.newPage();
+      await tab.goto(url);
+      await prepare(tab);
+      await ready(tab);
+      assets = new Map((await cacheEntries(tab)).map((entry) => [entry.url, entry.body]));
+      const index = new URL('index.html', url).href;
+      const assetRoot = new URL('assets/', url).href;
+      if (
+        !assets.has(index) ||
+        [...assets.keys()].some(
+          (asset) =>
+            asset !== index &&
+            !(
+              asset.startsWith(assetRoot) &&
+              /^[\w.-]+-[\w-]+\.(js|css)$/.test(asset.slice(assetRoot.length))
+            ),
+        )
+      )
+        throw new Error('Clean preparation cached an unexpected URL');
+    } finally {
+      await clean.close();
+    }
     let start = requests.length;
+    const onlineLogStart = logs.length;
     await input(first).setInputFiles([file, { ...file, name: markers[1] }]);
     await first.getByText(/ชุดที่ใช้ตรวจ.*schema-1/).waitFor();
     if (requests.length !== start) throw new Error('Online inspection made a request');
@@ -86,7 +115,7 @@ async function verifyOfflineReport(page) {
     // Prepare while a report exists, so any accidental upload or persistence is observable.
     await prepare(first);
     await ready(first);
-    const allowed = [...assets, new URL('offline-worker.js', url).href];
+    const allowed = [...assets.keys(), new URL('offline-worker.js', url).href];
     for (const request of requests.slice(start)) {
       if (
         !allowed.includes(request.url()) ||
@@ -96,6 +125,8 @@ async function verifyOfflineReport(page) {
         throw new Error('Unexpected preparation request');
       assertPrivate(JSON.stringify(await request.allHeaders()));
     }
+    if (logs.length !== onlineLogStart)
+      throw new Error('Online inspection or preparation generated a log');
     await verifyStorage(first, assets);
     await first.close();
     await context.setOffline(true);
@@ -104,7 +135,9 @@ async function verifyOfflineReport(page) {
     const cdp = await context.newCDPSession(offline);
     await cdp.send('Network.enable');
     await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
-    const navigation = await offline.goto(url, { waitUntil: 'networkidle' });
+    const bookmark = new URL(url);
+    bookmark.searchParams.set('view', 'report');
+    const navigation = await offline.goto(bookmark.href, { waitUntil: 'networkidle' });
     if (!navigation.fromServiceWorker())
       throw new Error('Offline navigation bypassed the prepared app');
     await ready(offline);
